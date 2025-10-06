@@ -57,15 +57,33 @@ CREATE TABLE categories (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Create orders table
+CREATE TABLE orders (
+  id BIGSERIAL PRIMARY KEY,
+  customer_name TEXT NOT NULL,
+  customer_email TEXT NOT NULL,
+  product_name TEXT NOT NULL,
+  quantity INTEGER NOT NULL,
+  unit_price NUMERIC NOT NULL,
+  total_amount NUMERIC NOT NULL,
+  status TEXT NOT NULL DEFAULT 'Pending',
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Enable Row Level Security
 ALTER TABLE products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
 
 -- Create policies that allow all operations for now (for demo purposes)
 CREATE POLICY "Allow all operations on products" ON products
   FOR ALL USING (true);
 
 CREATE POLICY "Allow all operations on categories" ON categories
+  FOR ALL USING (true);
+
+CREATE POLICY "Allow all operations on orders" ON orders
   FOR ALL USING (true);
 ```
 

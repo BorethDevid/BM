@@ -1,14 +1,14 @@
 <template>
   <div class="page-container">
     <div class="page-header">
-      <h1>Category Management</h1>
-      <p>Manage product categories and organize your inventory</p>
+      <h1>Order Management</h1>
+      <p>Manage customer orders and track order status</p>
     </div>
     
     <!-- Loading State -->
     <div v-if="loading" class="loading-container">
       <div class="loading-spinner"></div>
-      <p>Loading categories...</p>
+      <p>Loading orders...</p>
     </div>
     
     <!-- Error State -->
@@ -19,11 +19,11 @@
         <p><strong>To fix this:</strong></p>
         <ol>
           <li>Make sure your Supabase connection is working</li>
-          <li>Create a <code>categories</code> table in your database</li>
+          <li>Create an <code>orders</code> table in your database</li>
           <li>Check your environment variables</li>
         </ol>
-        <button class="btn btn-primary" @click="createCategoriesTable">
-          Create Categories Table
+        <button class="btn btn-primary" @click="createOrdersTable">
+          Create Orders Table
         </button>
       </div>
     </div>
@@ -33,51 +33,70 @@
       <!-- Action Bar -->
       <div class="action-bar">
         <button class="btn btn-primary" @click="openAddModal">
-          <span>+</span> Add New Category
+          <span>+</span> Add New Order
         </button>
-        <button class="btn btn-secondary" @click="fetchCategories">
+        <button class="btn btn-secondary" @click="fetchOrders">
           Refresh
         </button>
       </div>
       
-      <!-- Categories Table -->
-      <div v-if="categories.length > 0" class="categories-section">
+      <!-- Orders Table -->
+      <div v-if="orders.length > 0" class="orders-section">
         <div class="table-container">
-          <table class="categories-table">
+          <table class="orders-table">
             <thead>
               <tr>
-                <th>ID</th>
-                <th>Name</th>
-                <th>Description</th>
-                <th>Product Count</th>
-                <th>Created</th>
+                <th>Order ID</th>
+                <th>Customer</th>
+                <th>Product</th>
+                <th>Quantity</th>
+                <th>Total</th>
+                <th>Status</th>
+                <th>Order Date</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="category in categories" :key="category.id">
-                <td>{{ category.id }}</td>
+              <tr v-for="order in orders" :key="order.id">
+                <td>#{{ order.id }}</td>
                 <td>
-                  <span class="category-name">{{ category.name }}</span>
+                  <div class="customer-info">
+                    <strong>{{ order.customer_name }}</strong>
+                    <br>
+                    <small>{{ order.customer_email }}</small>
+                  </div>
                 </td>
-                <td>{{ category.description || 'No description' }}</td>
+                <td>{{ order.product_name }}</td>
+                <td>{{ order.quantity }}</td>
+                <td>${{ order.total_amount.toFixed(2) }}</td>
                 <td>
-                  <span class="product-count">{{ getProductCount(category.name) }}</span>
+                  <span 
+                    class="status-badge"
+                    :class="{
+                      'pending': order.status === 'Pending',
+                      'processing': order.status === 'Processing',
+                      'shipped': order.status === 'Shipped',
+                      'delivered': order.status === 'Delivered',
+                      'cancelled': order.status === 'Cancelled'
+                    }"
+                  >
+                    {{ order.status }}
+                  </span>
                 </td>
-                <td>{{ formatDate(category.created_at) }}</td>
+                <td>{{ formatDate(order.created_at) }}</td>
                 <td>
                   <div class="action-buttons">
                     <button 
                       class="btn btn-sm btn-edit" 
-                      @click="openEditModal(category)"
-                      title="Edit category"
+                      @click="openEditModal(order)"
+                      title="Edit order"
                     >
                       ✏️
                     </button>
                     <button 
                       class="btn btn-sm btn-delete" 
-                      @click="confirmDelete(category)"
-                      title="Delete category"
+                      @click="confirmDelete(order)"
+                      title="Delete order"
                     >
                       🗑️
                     </button>
@@ -91,40 +110,109 @@
       
       <!-- Empty State -->
       <div v-else class="empty-state">
-        <h3>No Categories Found</h3>
-        <p>Create your first category to organize your products!</p>
+        <h3>No Orders Found</h3>
+        <p>Create your first order to get started!</p>
         <button class="btn btn-primary" @click="openAddModal">
-          Add First Category
+          Add First Order
         </button>
       </div>
     </div>
 
-    <!-- Add/Edit Category Modal -->
+    <!-- Add/Edit Order Modal -->
     <div v-if="showModal" class="modal-overlay" @click="closeModal">
       <div class="modal-content" @click.stop>
         <div class="modal-header">
-          <h2>{{ isEditing ? 'Edit Category' : 'Add New Category' }}</h2>
+          <h2>{{ isEditing ? 'Edit Order' : 'Add New Order' }}</h2>
           <button class="modal-close" @click="closeModal">&times;</button>
         </div>
         
-        <form @submit.prevent="saveCategory" class="category-form">
-          <div class="form-group">
-            <label for="categoryName">Category Name *</label>
-            <input
-              id="categoryName"
-              v-model="categoryForm.name"
-              type="text"
-              placeholder="Enter category name"
-              required
-            />
+        <form @submit.prevent="saveOrder" class="order-form">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="customerName">Customer Name *</label>
+              <input
+                id="customerName"
+                v-model="orderForm.customer_name"
+                type="text"
+                placeholder="Enter customer name"
+                required
+              />
+            </div>
+            
+            <div class="form-group">
+              <label for="customerEmail">Customer Email *</label>
+              <input
+                id="customerEmail"
+                v-model="orderForm.customer_email"
+                type="email"
+                placeholder="Enter customer email"
+                required
+              />
+            </div>
+          </div>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label for="productName">Product Name *</label>
+              <input
+                id="productName"
+                v-model="orderForm.product_name"
+                type="text"
+                placeholder="Enter product name"
+                required
+              />
+            </div>
+            
+            <div class="form-group">
+              <label for="quantity">Quantity *</label>
+              <input
+                id="quantity"
+                v-model.number="orderForm.quantity"
+                type="number"
+                min="1"
+                placeholder="1"
+                required
+              />
+            </div>
+          </div>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label for="unitPrice">Unit Price *</label>
+              <input
+                id="unitPrice"
+                v-model.number="orderForm.unit_price"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                required
+              />
+            </div>
+            
+            <div class="form-group">
+              <label for="orderStatus">Status *</label>
+              <select
+                id="orderStatus"
+                v-model="orderForm.status"
+                required
+              >
+                <option value="">Select status</option>
+                <option value="Pending">Pending</option>
+                <option value="Processing">Processing</option>
+                <option value="Shipped">Shipped</option>
+                <option value="Delivered">Delivered</option>
+                <option value="Cancelled">Cancelled</option>
+              </select>
+            </div>
           </div>
           
           <div class="form-group">
-            <label for="categoryDescription">Description</label>
+            <label for="notes">Notes</label>
             <textarea
-              id="categoryDescription"
-              v-model="categoryForm.description"
-              placeholder="Enter category description (optional)"
+              id="notes"
+              v-model="orderForm.notes"
+              placeholder="Enter order notes (optional)"
               rows="3"
             ></textarea>
           </div>
@@ -134,7 +222,7 @@
               Cancel
             </button>
             <button type="submit" class="btn btn-primary" :disabled="saving">
-              {{ saving ? 'Saving...' : (isEditing ? 'Update Category' : 'Add Category') }}
+              {{ saving ? 'Saving...' : (isEditing ? 'Update Order' : 'Add Order') }}
             </button>
           </div>
         </form>
@@ -145,12 +233,12 @@
     <div v-if="showDeleteModal" class="modal-overlay" @click="closeDeleteModal">
       <div class="modal-content delete-modal" @click.stop>
         <div class="modal-header">
-          <h2>Delete Category</h2>
+          <h2>Delete Order</h2>
           <button class="modal-close" @click="closeDeleteModal">&times;</button>
         </div>
         
         <div class="delete-content">
-          <p>Are you sure you want to delete the category <strong>"{{ categoryToDelete?.name }}"</strong>?</p>
+          <p>Are you sure you want to delete order <strong>#{{ orderToDelete?.id }}</strong>?</p>
           <p class="warning">This action cannot be undone.</p>
           
           <div class="form-actions">
@@ -160,10 +248,10 @@
             <button 
               type="button" 
               class="btn btn-danger" 
-              @click="deleteCategory"
+              @click="deleteOrder"
               :disabled="deleting"
             >
-              {{ deleting ? 'Deleting...' : 'Delete Category' }}
+              {{ deleting ? 'Deleting...' : 'Delete Order' }}
             </button>
           </div>
         </div>
@@ -173,25 +261,22 @@
 </template>
 
 <script setup lang="ts">
-// Category management page
-interface Category {
+// Order management page
+interface Order {
   id: number
-  name: string
-  description?: string
+  customer_name: string
+  customer_email: string
+  product_name: string
+  quantity: number
+  unit_price: number
+  total_amount: number
+  status: string
+  notes?: string
   created_at: string
 }
 
-interface Product {
-  id: number
-  name: string
-  category: string
-  price: number
-  stock_quantity: number
-}
-
 // Reactive data
-const categories = ref<Category[]>([])
-const products = ref<Product[]>([])
+const orders = ref<Order[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
 const saving = ref(false)
@@ -201,58 +286,60 @@ const deleting = ref(false)
 const showModal = ref(false)
 const showDeleteModal = ref(false)
 const isEditing = ref(false)
-const categoryToDelete = ref<Category | null>(null)
+const orderToDelete = ref<Order | null>(null)
 
 // Form data
-const categoryForm = reactive({
-  name: '',
-  description: ''
+const orderForm = reactive({
+  customer_name: '',
+  customer_email: '',
+  product_name: '',
+  quantity: 1,
+  unit_price: 0,
+  status: '',
+  notes: ''
 })
 
-// Fetch categories from Supabase
-const fetchCategories = async () => {
+// Fetch orders from Supabase
+const fetchOrders = async () => {
   try {
     loading.value = true
     error.value = null
     
     const { select } = useSupabaseDB()
-    const { data, error: fetchError } = await select('categories')
+    const { data, error: fetchError } = await select('orders')
     
     if (fetchError) {
       throw fetchError
     }
     
-    categories.value = (data as unknown as Category[]) || []
-    
-    // Also fetch products to show counts
-    const { data: productsData, error: productsError } = await select('products')
-    if (!productsError && productsData) {
-      products.value = (productsData as unknown as Product[]) || []
-    }
+    orders.value = (data as unknown as Order[]) || []
     
   } catch (err) {
-    console.error('Error fetching categories:', err)
-    error.value = 'Failed to load categories. Please check your Supabase connection.'
+    console.error('Error fetching orders:', err)
+    error.value = 'Failed to load orders. Please check your Supabase connection.'
   } finally {
     loading.value = false
   }
 }
 
-// Create categories table (for setup)
-const createCategoriesTable = async () => {
+// Create orders table (for setup)
+const createOrdersTable = async () => {
   try {
-    const supabase = useSupabase()
-    
-    // This would typically be done via SQL editor in Supabase
-    alert('Please create the categories table in your Supabase SQL editor with this SQL:\n\n' +
-          'CREATE TABLE categories (\n' +
+    alert('Please create the orders table in your Supabase SQL editor with this SQL:\n\n' +
+          'CREATE TABLE orders (\n' +
           '  id BIGSERIAL PRIMARY KEY,\n' +
-          '  name TEXT NOT NULL UNIQUE,\n' +
-          '  description TEXT,\n' +
+          '  customer_name TEXT NOT NULL,\n' +
+          '  customer_email TEXT NOT NULL,\n' +
+          '  product_name TEXT NOT NULL,\n' +
+          '  quantity INTEGER NOT NULL,\n' +
+          '  unit_price NUMERIC NOT NULL,\n' +
+          '  total_amount NUMERIC NOT NULL,\n' +
+          '  status TEXT NOT NULL DEFAULT \'Pending\',\n' +
+          '  notes TEXT,\n' +
           '  created_at TIMESTAMPTZ DEFAULT NOW()\n' +
           ');\n\n' +
-          'ALTER TABLE categories ENABLE ROW LEVEL SECURITY;\n\n' +
-          'CREATE POLICY "Allow all operations on categories" ON categories\n' +
+          'ALTER TABLE orders ENABLE ROW LEVEL SECURITY;\n\n' +
+          'CREATE POLICY "Allow all operations on orders" ON orders\n' +
           '  FOR ALL USING (true);')
   } catch (err) {
     console.error('Error creating table:', err)
@@ -262,107 +349,131 @@ const createCategoriesTable = async () => {
 // Open add modal
 const openAddModal = () => {
   isEditing.value = false
-  categoryForm.name = ''
-  categoryForm.description = ''
+  Object.assign(orderForm, {
+    customer_name: '',
+    customer_email: '',
+    product_name: '',
+    quantity: 1,
+    unit_price: 0,
+    status: '',
+    notes: ''
+  })
   showModal.value = true
 }
 
 // Open edit modal
-const openEditModal = (category: Category) => {
+const openEditModal = (order: Order) => {
   isEditing.value = true
-  categoryForm.name = category.name
-  categoryForm.description = category.description || ''
+  Object.assign(orderForm, {
+    customer_name: order.customer_name,
+    customer_email: order.customer_email,
+    product_name: order.product_name,
+    quantity: order.quantity,
+    unit_price: order.unit_price,
+    status: order.status,
+    notes: order.notes || ''
+  })
   showModal.value = true
 }
 
 // Close modal
 const closeModal = () => {
   showModal.value = false
-  categoryForm.name = ''
-  categoryForm.description = ''
-}
-
-// Save category (add or update)
-const saveCategory = async () => {
-  try {
-    saving.value = true
-    
-    if (!categoryForm.name.trim()) {
-      alert('Please enter a category name')
-      return
-    }
-    
-    const { insert, update } = useSupabaseDB()
-    
-    if (isEditing.value) {
-      // Update existing category
-      const categoryToUpdate = categories.value.find(c => c.name === categoryForm.name)
-      if (categoryToUpdate) {
-        const { error } = await update('categories', {
-          description: categoryForm.description
-        }).eq('id', categoryToUpdate.id)
-        
-        if (error) throw error
-      }
-    } else {
-      // Add new category
-      const { error } = await insert('categories', [{
-        name: categoryForm.name.trim(),
-        description: categoryForm.description.trim() || null
-      }])
-      
-      if (error) throw error
-    }
-    
-    closeModal()
-    await fetchCategories()
-    
-  } catch (err) {
-    console.error('Error saving category:', err)
-    alert('Failed to save category. Please try again.')
-  } finally {
-    saving.value = false
-  }
+  Object.assign(orderForm, {
+    customer_name: '',
+    customer_email: '',
+    product_name: '',
+    quantity: 1,
+    unit_price: 0,
+    status: '',
+    notes: ''
+  })
+  isEditing.value = false
 }
 
 // Confirm delete
-const confirmDelete = (category: Category) => {
-  categoryToDelete.value = category
+const confirmDelete = (order: Order) => {
+  orderToDelete.value = order
   showDeleteModal.value = true
 }
 
 // Close delete modal
 const closeDeleteModal = () => {
   showDeleteModal.value = false
-  categoryToDelete.value = null
+  orderToDelete.value = null
 }
 
-// Delete category
-const deleteCategory = async () => {
+// Save order (add or update)
+const saveOrder = async () => {
+  try {
+    saving.value = true
+    
+    // Validate form
+    if (!orderForm.customer_name || !orderForm.customer_email || !orderForm.product_name || !orderForm.status) {
+      alert('Please fill in all required fields')
+      return
+    }
+    
+    // Calculate total amount
+    const totalAmount = orderForm.quantity * orderForm.unit_price
+    
+    const orderData = {
+      customer_name: orderForm.customer_name.trim(),
+      customer_email: orderForm.customer_email.trim(),
+      product_name: orderForm.product_name.trim(),
+      quantity: orderForm.quantity,
+      unit_price: orderForm.unit_price,
+      total_amount: totalAmount,
+      status: orderForm.status,
+      notes: orderForm.notes.trim() || null
+    }
+    
+    if (isEditing.value) {
+      // Update existing order
+      const { update } = useSupabaseDB()
+      const { error } = await update('orders', orderData).eq('id', orderToDelete.value?.id)
+      
+      if (error) throw error
+    } else {
+      // Add new order
+      const { insert } = useSupabaseDB()
+      const { error } = await insert('orders', [orderData])
+      
+      if (error) throw error
+    }
+    
+    closeModal()
+    await fetchOrders()
+    
+  } catch (err) {
+    console.error('Error saving order:', err)
+    alert('Failed to save order. Please try again.')
+  } finally {
+    saving.value = false
+  }
+}
+
+// Delete order
+const deleteOrder = async () => {
   try {
     deleting.value = true
     
-    if (!categoryToDelete.value) return
+    if (!orderToDelete.value) return
     
     const { delete: deleteRecord } = useSupabaseDB()
-    const { error } = await deleteRecord('categories').eq('id', categoryToDelete.value.id)
+    const { error } = await deleteRecord('orders').eq('id', orderToDelete.value.id)
     
     if (error) throw error
     
     closeDeleteModal()
-    await fetchCategories()
+    await fetchOrders()
     
   } catch (err) {
-    console.error('Error deleting category:', err)
-    alert('Failed to delete category. Please try again.')
+    console.error('Error deleting order:', err)
+    alert('Failed to delete order. Please try again.')
   } finally {
     deleting.value = false
   }
-}
-
-// Get product count for category
-const getProductCount = (categoryName: string) => {
-  return products.value.filter(p => p.category === categoryName).length
 }
 
 // Format date with time
@@ -384,7 +495,7 @@ const formatDate = (dateString: string) => {
 
 // Fetch data on component mount
 onMounted(() => {
-  fetchCategories()
+  fetchOrders()
 })
 </script>
 
@@ -494,12 +605,12 @@ onMounted(() => {
   overflow: hidden;
 }
 
-.categories-table {
+.orders-table {
   width: 100%;
   border-collapse: collapse;
 }
 
-.categories-table th {
+.orders-table th {
   background: #f8f9fa;
   color: #2c3e50;
   font-weight: 600;
@@ -508,30 +619,65 @@ onMounted(() => {
   border-bottom: 2px solid #dee2e6;
 }
 
-.categories-table td {
+.orders-table td {
   padding: 1rem;
   border-bottom: 1px solid #dee2e6;
   color: #495057;
 }
 
-.categories-table tr:hover {
+.orders-table tr:hover {
   background: #f8f9fa;
 }
 
-.category-name {
-  font-weight: 600;
-  color: #2c3e50;
+.customer-info {
+  line-height: 1.4;
 }
 
-.product-count {
-  background: #e3f2fd;
-  color: #1976d2;
-  padding: 0.25rem 0.5rem;
-  border-radius: 12px;
+.customer-info strong {
+  color: #2c3e50;
+  font-weight: 600;
+}
+
+.customer-info small {
+  color: #7f8c8d;
+  font-size: 0.85rem;
+}
+
+/* Status Badges */
+.status-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
   font-size: 0.8rem;
   font-weight: 600;
+  text-transform: uppercase;
 }
 
+.status-badge.pending {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.status-badge.processing {
+  background: #cce5ff;
+  color: #004085;
+}
+
+.status-badge.shipped {
+  background: #d1ecf1;
+  color: #0c5460;
+}
+
+.status-badge.delivered {
+  background: #d4edda;
+  color: #155724;
+}
+
+.status-badge.cancelled {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+/* Action Buttons */
 .action-buttons {
   display: flex;
   gap: 0.5rem;
@@ -609,7 +755,7 @@ onMounted(() => {
   border-radius: 12px;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
   width: 90%;
-  max-width: 500px;
+  max-width: 600px;
   max-height: 90vh;
   overflow-y: auto;
 }
@@ -650,22 +796,15 @@ onMounted(() => {
   color: #e74c3c;
 }
 
-.category-form {
+.order-form {
   padding: 1.5rem;
 }
 
-.delete-content {
-  padding: 1.5rem;
-}
-
-.delete-content p {
-  margin-bottom: 1rem;
-  color: #495057;
-}
-
-.warning {
-  color: #dc3545;
-  font-weight: 600;
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
 }
 
 .form-group {
@@ -680,6 +819,7 @@ onMounted(() => {
 }
 
 .form-group input,
+.form-group select,
 .form-group textarea {
   width: 100%;
   padding: 0.75rem;
@@ -691,10 +831,25 @@ onMounted(() => {
 }
 
 .form-group input:focus,
+.form-group select:focus,
 .form-group textarea:focus {
   outline: none;
   border-color: #3498db;
   box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.delete-content {
+  padding: 1.5rem;
+}
+
+.delete-content p {
+  margin-bottom: 1rem;
+  color: #495057;
+}
+
+.warning {
+  color: #dc3545;
+  font-weight: 600;
 }
 
 .form-actions {
@@ -765,8 +920,12 @@ onMounted(() => {
     overflow-x: auto;
   }
   
-  .categories-table {
-    min-width: 600px;
+  .orders-table {
+    min-width: 800px;
+  }
+  
+  .form-row {
+    grid-template-columns: 1fr;
   }
   
   .modal-content {

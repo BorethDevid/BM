@@ -257,6 +257,7 @@ const error = ref<string | null>(null)
 // Computed properties
 const { totalProducts, lowStockItems, outOfStockItems } = toRefs(stockData)
 
+
 // Fetch categories from Supabase
 const fetchCategories = async () => {
   try {

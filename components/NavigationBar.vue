@@ -20,11 +20,11 @@
           Categories
         </NuxtLink>
         <NuxtLink 
-          to="/order" 
+          to="/orders" 
           class="navbar-tab"
-          :class="{ active: $route.path === '/order' }"
+          :class="{ active: $route.path === '/orders' }"
         >
-          Order
+          Orders
         </NuxtLink>
       </div>
     </div>
