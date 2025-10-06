@@ -37,8 +37,9 @@
 | `category` | `text` | - | ❌ | ❌ |
 | `created_at` | `timestamptz` | `now()` | ❌ | ❌ |
 
-### SQL to Create Table:
+### SQL to Create Tables:
 ```sql
+-- Create products table
 CREATE TABLE products (
   id BIGSERIAL PRIMARY KEY,
   name TEXT NOT NULL,
@@ -48,11 +49,23 @@ CREATE TABLE products (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Create categories table
+CREATE TABLE categories (
+  id BIGSERIAL PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  description TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Enable Row Level Security
 ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
 
--- Create a policy that allows all operations for now (for demo purposes)
+-- Create policies that allow all operations for now (for demo purposes)
 CREATE POLICY "Allow all operations on products" ON products
+  FOR ALL USING (true);
+
+CREATE POLICY "Allow all operations on categories" ON categories
   FOR ALL USING (true);
 ```
 
@@ -108,6 +121,20 @@ INSERT INTO products (name, price, stock_quantity, category) VALUES
 ```
 
 4. Click **"Run"** to execute the script
+
+### Add Sample Categories (Optional)
+
+If you want to test with sample categories, run this SQL:
+
+```sql
+-- Insert sample categories
+INSERT INTO categories (name, description) VALUES
+('Electronics', 'Electronic devices and gadgets'),
+('Accessories', 'Computer and mobile accessories'),
+('Audio', 'Audio equipment and accessories'),
+('Furniture', 'Office and home furniture'),
+('Miscellaneous', 'Other products and items');
+```
 
 ### Option 2: Using Table Editor
 

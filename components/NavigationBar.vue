@@ -13,6 +13,13 @@
           Stock
         </NuxtLink>
         <NuxtLink 
+          to="/categories" 
+          class="navbar-tab"
+          :class="{ active: $route.path === '/categories' }"
+        >
+          Categories
+        </NuxtLink>
+        <NuxtLink 
           to="/order" 
           class="navbar-tab"
           :class="{ active: $route.path === '/order' }"

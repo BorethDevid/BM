@@ -22,9 +22,6 @@
           <li>Set up a <code>products</code> table in your Supabase database</li>
           <li>Make sure your Supabase project is running</li>
         </ol>
-        <button class="btn btn-primary" @click="addSampleProducts">
-          Add Sample Products (Demo)
-        </button>
       </div>
     </div>
     
@@ -62,6 +59,7 @@
                 <th>Price</th>
                 <th>Stock</th>
                 <th>Status</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -85,6 +83,24 @@
                     }}
                   </span>
                 </td>
+                <td>
+                  <div class="action-buttons">
+                    <button 
+                      class="btn btn-sm btn-edit" 
+                      @click="openEditModal(product)"
+                      title="Edit product"
+                    >
+                      ✏️
+                    </button>
+                    <button 
+                      class="btn btn-sm btn-delete" 
+                      @click="confirmDelete(product)"
+                      title="Delete product"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -95,9 +111,6 @@
       <div v-else class="empty-state">
         <h3>No Products Found</h3>
         <p>Your inventory is empty. Add some products to get started!</p>
-        <button class="btn btn-primary" @click="addSampleProducts">
-          Add Sample Products
-        </button>
       </div>
       
       <div class="stock-actions">
@@ -107,9 +120,108 @@
         <button class="btn btn-secondary" @click="fetchProducts">
           Refresh Data
         </button>
-        <button class="btn btn-info" @click="addSampleProducts">
-          Add Sample Products
-        </button>
+      </div>
+    </div>
+
+    <!-- Add/Edit Product Modal -->
+    <div v-if="showAddModal || showEditModal" class="modal-overlay" @click="closeModal">
+      <div class="modal-content" @click.stop>
+        <div class="modal-header">
+          <h2>{{ showEditModal ? 'Edit Product' : 'Add New Product' }}</h2>
+          <button class="modal-close" @click="closeModal">&times;</button>
+        </div>
+        
+        <form @submit.prevent="saveNewProduct" class="product-form">
+          <div class="form-group">
+            <label for="productName">Product Name *</label>
+            <input
+              id="productName"
+              v-model="newProduct.name"
+              type="text"
+              placeholder="Enter product name"
+              required
+            />
+          </div>
+          
+          <div class="form-group">
+            <label for="productPrice">Price *</label>
+            <input
+              id="productPrice"
+              v-model.number="newProduct.price"
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="0.00"
+              required
+            />
+          </div>
+          
+          <div class="form-group">
+            <label for="productStock">Stock Quantity</label>
+            <input
+              id="productStock"
+              v-model.number="newProduct.stock_quantity"
+              type="number"
+              min="0"
+              placeholder="0"
+            />
+          </div>
+          
+          <div class="form-group">
+            <label for="productCategory">Category *</label>
+            <select
+              id="productCategory"
+              v-model="newProduct.category"
+              required
+            >
+              <option value="">Select a category</option>
+              <option v-for="category in categories" :key="category.id" :value="category.name">
+                {{ category.name }}
+              </option>
+            </select>
+            <p v-if="categories.length === 0" class="form-help">
+              No categories found. <NuxtLink to="/categories" class="link">Create categories first</NuxtLink>
+            </p>
+          </div>
+          
+          <div class="form-actions">
+            <button type="button" class="btn btn-secondary" @click="closeModal">
+              Cancel
+            </button>
+            <button type="submit" class="btn btn-primary" :disabled="saving">
+              {{ saving ? 'Saving...' : (showEditModal ? 'Update Product' : 'Add Product') }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div v-if="showDeleteModal" class="modal-overlay" @click="closeDeleteModal">
+      <div class="modal-content delete-modal" @click.stop>
+        <div class="modal-header">
+          <h2>Delete Product</h2>
+          <button class="modal-close" @click="closeDeleteModal">&times;</button>
+        </div>
+        
+        <div class="delete-content">
+          <p>Are you sure you want to delete the product <strong>"{{ productToDelete?.name }}"</strong>?</p>
+          <p class="warning">This action cannot be undone.</p>
+          
+          <div class="form-actions">
+            <button type="button" class="btn btn-secondary" @click="closeDeleteModal">
+              Cancel
+            </button>
+            <button 
+              type="button" 
+              class="btn btn-danger" 
+              @click="deleteProduct"
+              :disabled="deleting"
+            >
+              {{ deleting ? 'Deleting...' : 'Delete Product' }}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -145,6 +257,23 @@ const error = ref<string | null>(null)
 // Computed properties
 const { totalProducts, lowStockItems, outOfStockItems } = toRefs(stockData)
 
+// Fetch categories from Supabase
+const fetchCategories = async () => {
+  try {
+    const { select } = useSupabaseDB()
+    const { data, error: fetchError } = await select('categories')
+    
+    if (fetchError) {
+      console.error('Error fetching categories:', fetchError)
+      return
+    }
+    
+    categories.value = (data as unknown as Array<{id: number, name: string, description?: string}>) || []
+  } catch (err) {
+    console.error('Error fetching categories:', err)
+  }
+}
+
 // Fetch products from Supabase
 const fetchProducts = async () => {
   try {
@@ -178,36 +307,163 @@ const fetchProducts = async () => {
   }
 }
 
-// Add sample products to Supabase (for demo purposes)
-const addSampleProducts = async () => {
+
+// Add new product modal state
+const showAddModal = ref(false)
+const showEditModal = ref(false)
+const showDeleteModal = ref(false)
+const editingProduct = ref<Product | null>(null)
+const productToDelete = ref<Product | null>(null)
+const saving = ref(false)
+const deleting = ref(false)
+
+const newProduct = reactive({
+  name: '',
+  price: 0,
+  stock_quantity: 0,
+  category: ''
+})
+
+// Fetch categories from database
+const categories = ref<Array<{id: number, name: string, description?: string}>>([])
+
+// Add new product function
+const addNewProduct = (): void => {
+  showAddModal.value = true
+}
+
+// Save new product
+const saveNewProduct = async () => {
   try {
-    const { insert } = useSupabaseDB()
+    saving.value = true
     
-    const sampleProducts = [
-      { name: 'Laptop Pro 15"', price: 1299.99, stock_quantity: 25, category: 'Electronics' },
-      { name: 'Wireless Mouse', price: 29.99, stock_quantity: 150, category: 'Accessories' },
-      { name: 'Mechanical Keyboard', price: 89.99, stock_quantity: 5, category: 'Accessories' },
-      { name: 'Monitor 27"', price: 399.99, stock_quantity: 0, category: 'Electronics' },
-      { name: 'USB-C Cable', price: 19.99, stock_quantity: 200, category: 'Accessories' },
-      { name: 'Gaming Headset', price: 149.99, stock_quantity: 8, category: 'Audio' }
-    ]
-    
-    const { error } = await insert('products', sampleProducts)
-    
-    if (error) {
-      console.error('Error adding sample products:', error)
+    // Validate form
+    if (!newProduct.name || !newProduct.category || newProduct.price <= 0) {
+      alert('Please fill in all required fields with valid values')
+      return
+    }
+
+    if (showEditModal.value) {
+      // Update existing product
+      await updateProduct()
     } else {
-      console.log('Sample products added successfully!')
-      await fetchProducts() // Refresh the data
+      // Add new product
+      const { insert } = useSupabaseDB()
+      const { error } = await insert('products', [newProduct])
+      
+      if (error) {
+        console.error('Error adding product:', error)
+        alert('Failed to add product. Please try again.')
+      } else {
+        console.log('Product added successfully!')
+        closeModal()
+        // Refresh the data
+        await Promise.all([
+          fetchProducts(),
+          fetchCategories()
+        ])
+      }
     }
   } catch (err) {
-    console.error('Error adding sample products:', err)
+    console.error('Error saving product:', err)
+    alert('Failed to save product. Please try again.')
+  } finally {
+    saving.value = false
   }
 }
 
-const addNewProduct = (): void => {
-  console.log('Adding new product...')
-  // Add product logic here
+// Open edit modal
+const openEditModal = (product: Product) => {
+  editingProduct.value = product
+  newProduct.name = product.name
+  newProduct.price = product.price
+  newProduct.stock_quantity = product.stock_quantity
+  newProduct.category = product.category
+  showEditModal.value = true
+}
+
+// Confirm delete
+const confirmDelete = (product: Product) => {
+  productToDelete.value = product
+  showDeleteModal.value = true
+}
+
+// Close modals
+const closeModal = () => {
+  showAddModal.value = false
+  showEditModal.value = false
+  // Reset form
+  Object.assign(newProduct, {
+    name: '',
+    price: 0,
+    stock_quantity: 0,
+    category: ''
+  })
+  editingProduct.value = null
+}
+
+const closeDeleteModal = () => {
+  showDeleteModal.value = false
+  productToDelete.value = null
+}
+
+// Update product
+const updateProduct = async () => {
+  try {
+    saving.value = true
+    
+    if (!editingProduct.value) return
+    
+    if (!newProduct.name.trim()) {
+      alert('Please enter a product name')
+      return
+    }
+    
+    const { update } = useSupabaseDB()
+    const { error } = await update('products', {
+      name: newProduct.name.trim(),
+      price: newProduct.price,
+      stock_quantity: newProduct.stock_quantity,
+      category: newProduct.category
+    }).eq('id', editingProduct.value.id)
+    
+    if (error) throw error
+    
+    closeModal()
+    await Promise.all([
+      fetchProducts(),
+      fetchCategories()
+    ])
+    
+  } catch (err) {
+    console.error('Error updating product:', err)
+    alert('Failed to update product. Please try again.')
+  } finally {
+    saving.value = false
+  }
+}
+
+// Delete product
+const deleteProduct = async () => {
+  try {
+    deleting.value = true
+    
+    if (!productToDelete.value) return
+    
+    const { delete: deleteRecord } = useSupabaseDB()
+    const { error } = await deleteRecord('products').eq('id', productToDelete.value.id)
+    
+    if (error) throw error
+    
+    closeDeleteModal()
+    await fetchProducts()
+    
+  } catch (err) {
+    console.error('Error deleting product:', err)
+    alert('Failed to delete product. Please try again.')
+  } finally {
+    deleting.value = false
+  }
 }
 
 const viewInventory = (): void => {
@@ -216,8 +472,11 @@ const viewInventory = (): void => {
 }
 
 // Fetch data on component mount
-onMounted(() => {
-  fetchProducts()
+onMounted(async () => {
+  await Promise.all([
+    fetchProducts(),
+    fetchCategories()
+  ])
 })
 </script>
 
@@ -487,6 +746,177 @@ onMounted(() => {
   margin-bottom: 2rem;
 }
 
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  width: 90%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.modal-header h2 {
+  margin: 0;
+  color: #2c3e50;
+  font-size: 1.5rem;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 2rem;
+  cursor: pointer;
+  color: #7f8c8d;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-close:hover {
+  color: #e74c3c;
+}
+
+.product-form {
+  padding: 1.5rem;
+}
+
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.form-group input,
+.form-group select {
+  width: 100%;
+  padding: 0.75rem;
+  border: 2px solid #dee2e6;
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: border-color 0.3s ease;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.form-help {
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+  color: #7f8c8d;
+}
+
+.form-help .link {
+  color: #3498db;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.form-help .link:hover {
+  text-decoration: underline;
+}
+
+/* Action Buttons */
+.action-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-sm {
+  padding: 0.5rem;
+  font-size: 0.9rem;
+  min-width: auto;
+}
+
+.btn-edit {
+  background-color: #ffc107;
+  color: #212529;
+}
+
+.btn-edit:hover {
+  background-color: #e0a800;
+}
+
+.btn-delete {
+  background-color: #dc3545;
+  color: white;
+}
+
+.btn-delete:hover {
+  background-color: #c82333;
+}
+
+.btn-danger {
+  background-color: #dc3545;
+  color: white;
+}
+
+.btn-danger:hover {
+  background-color: #c82333;
+}
+
+/* Delete Modal */
+.delete-modal {
+  max-width: 400px;
+}
+
+.delete-content {
+  padding: 1.5rem;
+}
+
+.delete-content p {
+  margin-bottom: 1rem;
+  color: #495057;
+}
+
+.warning {
+  color: #dc3545;
+  font-weight: 600;
+}
+
+.form-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid #dee2e6;
+}
+
 /* Responsive design */
 @media (max-width: 768px) {
   .page-container {
@@ -510,6 +940,19 @@ onMounted(() => {
   .btn {
     width: 100%;
     max-width: 300px;
+  }
+  
+  .modal-content {
+    width: 95%;
+    margin: 1rem;
+  }
+  
+  .form-actions {
+    flex-direction: column;
+  }
+  
+  .form-actions .btn {
+    width: 100%;
   }
 }
 </style>
