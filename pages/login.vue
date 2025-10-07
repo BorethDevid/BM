@@ -1,5 +1,5 @@
 <template>
-  <div class="login-container">
+  <div v-if="isClient" class="login-container">
     <div class="login-background">
       <div class="floating-shapes">
         <div class="shape shape-1"></div>
@@ -77,6 +77,12 @@
       </div>
     </div>
   </div>
+  <div v-else class="loading-container">
+    <div class="loading-spinner">
+      <div class="spinner"></div>
+      <p>Loading...</p>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -84,12 +90,20 @@
 const router = useRouter()
 const { isAuthenticated, login, currentUser } = useAuth()
 
+// Client-side only rendering
+const isClient = ref(false)
+
 // Check if already logged in on page load
 onMounted(() => {
-  if (isAuthenticated.value) {
-    console.log('User already authenticated, redirecting to dashboard')
-    navigateTo('/')
-  }
+  isClient.value = true
+  
+  // Wait for auth state to be initialized
+  nextTick(() => {
+    if (isAuthenticated.value) {
+      console.log('User already authenticated, redirecting to dashboard')
+      navigateTo('/')
+    }
+  })
 })
 
 // Login form data
@@ -178,6 +192,11 @@ const handleLogin = async () => {
 // Set page title
 useHead({
   title: 'Login - BM System'
+})
+
+// Ensure this page is only rendered on client side
+definePageMeta({
+  layout: false
 })
 </script>
 
@@ -464,6 +483,35 @@ useHead({
   color: #6b7280;
   font-size: 0.9rem;
   margin: 0;
+  font-weight: 500;
+}
+
+/* Loading container */
+.loading-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.loading-spinner {
+  text-align: center;
+  color: white;
+}
+
+.loading-spinner .spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  border-top: 4px solid white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 1rem;
+}
+
+.loading-spinner p {
+  font-size: 1.1rem;
   font-weight: 500;
 }
 
