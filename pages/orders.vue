@@ -153,14 +153,21 @@
           
           <div class="form-row">
             <div class="form-group">
-              <label for="productName">Product Name *</label>
-              <input
-                id="productName"
-                v-model="orderForm.product_name"
-                type="text"
-                placeholder="Enter product name"
+              <label for="productSelect">Product *</label>
+              <select
+                id="productSelect"
+                v-model="orderForm.product_id"
+                @change="onProductSelect"
                 required
-              />
+              >
+                <option value="">Select a product</option>
+                <option v-for="product in products" :key="product.id" :value="product.id">
+                  {{ product.name }} - ${{ product.price.toFixed(2) }} (Stock: {{ product.stock_quantity }})
+                </option>
+              </select>
+              <p v-if="products.length === 0" class="form-help">
+                No products found. <NuxtLink to="/stock" class="link">Add products first</NuxtLink>
+              </p>
             </div>
             
             <div class="form-group">
@@ -277,6 +284,7 @@ interface Order {
 
 // Reactive data
 const orders = ref<Order[]>([])
+const products = ref<Array<{id: number, name: string, price: number, stock_quantity: number}>>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
 const saving = ref(false)
@@ -292,12 +300,30 @@ const orderToDelete = ref<Order | null>(null)
 const orderForm = reactive({
   customer_name: '',
   customer_email: '',
+  product_id: '',
   product_name: '',
   quantity: 1,
   unit_price: 0,
   status: '',
   notes: ''
 })
+
+// Fetch products from Supabase
+const fetchProducts = async () => {
+  try {
+    const { select } = useSupabaseDB()
+    const { data, error: fetchError } = await select('products')
+    
+    if (fetchError) {
+      console.error('Error fetching products:', fetchError)
+      return
+    }
+    
+    products.value = (data as unknown as Array<{id: number, name: string, price: number, stock_quantity: number}>) || []
+  } catch (err) {
+    console.error('Error fetching products:', err)
+  }
+}
 
 // Fetch orders from Supabase
 const fetchOrders = async () => {
@@ -346,12 +372,40 @@ const createOrdersTable = async () => {
   }
 }
 
+// Handle product selection
+const onProductSelect = () => {
+  const selectedProduct = products.value.find((p: {id: number, name: string, price: number, stock_quantity: number}) => p.id.toString() === orderForm.product_id)
+  if (selectedProduct) {
+    orderForm.product_name = selectedProduct.name
+    orderForm.unit_price = selectedProduct.price
+  } else {
+    // Reset if no product selected
+    orderForm.product_name = ''
+    orderForm.unit_price = 0
+  }
+}
+
+// Watch for product_id changes to auto-update product_name
+watch(() => orderForm.product_id, (newProductId: string) => {
+  if (newProductId) {
+    const selectedProduct = products.value.find((p: {id: number, name: string, price: number, stock_quantity: number}) => p.id.toString() === newProductId)
+    if (selectedProduct) {
+      orderForm.product_name = selectedProduct.name
+      orderForm.unit_price = selectedProduct.price
+    }
+  } else {
+    orderForm.product_name = ''
+    orderForm.unit_price = 0
+  }
+})
+
 // Open add modal
 const openAddModal = () => {
   isEditing.value = false
   Object.assign(orderForm, {
     customer_name: '',
     customer_email: '',
+    product_id: '',
     product_name: '',
     quantity: 1,
     unit_price: 0,
@@ -364,9 +418,12 @@ const openAddModal = () => {
 // Open edit modal
 const openEditModal = (order: Order) => {
   isEditing.value = true
+  // Find the product ID for the selected product
+  const product = products.value.find((p: {id: number, name: string, price: number, stock_quantity: number}) => p.name === order.product_name)
   Object.assign(orderForm, {
     customer_name: order.customer_name,
     customer_email: order.customer_email,
+    product_id: product?.id.toString() || '',
     product_name: order.product_name,
     quantity: order.quantity,
     unit_price: order.unit_price,
@@ -382,6 +439,7 @@ const closeModal = () => {
   Object.assign(orderForm, {
     customer_name: '',
     customer_email: '',
+    product_id: '',
     product_name: '',
     quantity: 1,
     unit_price: 0,
@@ -409,8 +467,55 @@ const saveOrder = async () => {
     saving.value = true
     
     // Validate form
-    if (!orderForm.customer_name || !orderForm.customer_email || !orderForm.product_name || !orderForm.status) {
+    if (!orderForm.customer_name || !orderForm.customer_email || !orderForm.product_id || !orderForm.status) {
       alert('Please fill in all required fields')
+      return
+    }
+    
+    // Additional check for product_id
+    if (!orderForm.product_id || orderForm.product_id === '') {
+      alert('Please select a product from the dropdown')
+      return
+    }
+    
+    // Check if products are loaded
+    if (!products.value || products.value.length === 0) {
+      console.log('No products available, fetching products...')
+      await fetchProducts()
+    }
+    
+    // Ensure product_name is set from the selected product
+    console.log('Looking for product with ID:', orderForm.product_id)
+    console.log('Available products:', products.value)
+    
+    // Try different comparison methods
+    let selectedProduct = products.value.find((p: {id: number, name: string, price: number, stock_quantity: number}) => p.id.toString() === orderForm.product_id)
+    
+    // If not found, try with number comparison
+    if (!selectedProduct) {
+      selectedProduct = products.value.find((p: {id: number, name: string, price: number, stock_quantity: number}) => p.id === parseInt(orderForm.product_id))
+    }
+    
+    // If still not found, try with string comparison (convert id to string)
+    if (!selectedProduct) {
+      selectedProduct = products.value.find((p: {id: number, name: string, price: number, stock_quantity: number}) => p.id.toString() === orderForm.product_id)
+    }
+    
+    console.log('Found selected product:', selectedProduct)
+    
+    if (selectedProduct) {
+      orderForm.product_name = selectedProduct.name
+      orderForm.unit_price = selectedProduct.price
+      console.log('Set product_name to:', orderForm.product_name)
+    } else {
+      console.log('No product found for ID:', orderForm.product_id)
+      alert('Please select a valid product from the dropdown')
+      return
+    }
+    
+    // Double check that product_name is not empty
+    if (!orderForm.product_name || orderForm.product_name.trim() === '') {
+      alert('Product name is required')
       return
     }
     
@@ -427,6 +532,11 @@ const saveOrder = async () => {
       status: orderForm.status,
       notes: orderForm.notes.trim() || null
     }
+    
+    // Debug: Log the order data to check if product_name is set
+    console.log('Saving order with data:', orderData)
+    console.log('Selected product:', selectedProduct)
+    console.log('Form product_name:', orderForm.product_name)
     
     if (isEditing.value) {
       // Update existing order
@@ -494,8 +604,11 @@ const formatDate = (dateString: string) => {
 }
 
 // Fetch data on component mount
-onMounted(() => {
-  fetchOrders()
+onMounted(async () => {
+  await Promise.all([
+    fetchOrders(),
+    fetchProducts()
+  ])
 })
 </script>
 
@@ -836,6 +949,22 @@ onMounted(() => {
   outline: none;
   border-color: #3498db;
   box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.form-help {
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+  color: #7f8c8d;
+}
+
+.form-help .link {
+  color: #3498db;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.form-help .link:hover {
+  text-decoration: underline;
 }
 
 .delete-content {
