@@ -30,23 +30,36 @@ export const useAuth = () => {
     }
   }
 
-  // Login function
+  // Login function with database verification
   const login = async (username: string, password: string): Promise<boolean> => {
     console.log('=== useAuth LOGIN START ===')
     console.log('useAuth login called with:', username, '***')
-    console.log('Password check:', password === '1234')
     loading.value = true
     
     try {
-      // Hardcoded credentials for now
-      if (username === 'Admin' && password === '1234') {
-        console.log('✅ Credentials match, setting authenticated state')
+      // Query database to verify credentials
+      const response = await $fetch<{ data: any; error: string | null }>('/api/auth/login', {
+        method: 'POST',
+        body: {
+          username: username.trim(),
+          password: password.trim()
+        }
+      })
+      
+      if (response.error) {
+        console.log('❌ Database error:', response.error)
+        console.log('=== useAuth LOGIN END (ERROR) ===')
+        return false
+      }
+      
+      if (response.data && response.data.user) {
+        console.log('✅ Database credentials verified')
         
         // Set state
         isAuthenticated.value = true
         currentUser.value = { 
-          username: 'Admin', 
-          role: 'admin' 
+          username: response.data.user.username, 
+          role: response.data.user.role 
         }
         
         console.log('✅ Auth state set:', { 
@@ -68,7 +81,7 @@ export const useAuth = () => {
         console.log('=== useAuth LOGIN END (SUCCESS) ===')
         return true
       } else {
-        console.log('❌ Invalid credentials - username:', username, 'password check:', password === '1234')
+        console.log('❌ Invalid credentials - user not found or password incorrect')
         console.log('=== useAuth LOGIN END (FAILED) ===')
         return false
       }
