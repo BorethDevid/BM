@@ -32,12 +32,42 @@
     <div v-else>
       <!-- Action Bar -->
       <div class="action-bar">
-        <button class="btn btn-primary" @click="openAddModal">
-          <span>+</span> Add New Order
-        </button>
-        <button class="btn btn-secondary" @click="fetchOrders">
-          Refresh
-        </button>
+        <div class="action-left">
+          <button class="btn btn-primary" @click="openAddModal">
+            <span>+</span> Add New Order
+          </button>
+          <button class="btn btn-secondary" @click="fetchOrders">
+            Refresh
+          </button>
+        </div>
+        <div class="action-right">
+          <button class="btn btn-outline" @click="toggleColumnMenu">
+            <span>👁️</span> Columns
+          </button>
+        </div>
+      </div>
+      
+      <!-- Column Toggle Menu -->
+      <div v-if="showColumnMenu" class="column-menu">
+        <div class="column-menu-header">
+          <h3>Show/Hide Columns</h3>
+          <button class="menu-close" @click="toggleColumnMenu">&times;</button>
+        </div>
+        <div class="column-options">
+          <label v-for="column in availableColumns" :key="column.key" class="column-option">
+            <input 
+              type="checkbox" 
+              :checked="getColumnVisibility(column.key)"
+              @change="toggleColumn(column.key)"
+            />
+            <span class="column-label">{{ column.label }}</span>
+          </label>
+        </div>
+        <div class="column-menu-actions">
+          <button class="btn btn-sm btn-secondary" @click="showAllColumns">Show All</button>
+          <button class="btn btn-sm btn-secondary" @click="hideAllColumns">Hide All</button>
+          <button class="btn btn-sm btn-primary" @click="resetColumns">Reset</button>
+        </div>
       </div>
       
       <!-- Orders Table -->
@@ -46,30 +76,32 @@
           <table class="orders-table">
             <thead>
               <tr>
-                <th>Order ID</th>
-                <th>Customer</th>
-                <th>Product</th>
-                <th>Quantity</th>
-                <th>Total</th>
-                <th>Status</th>
-                <th>Order Date</th>
-                <th>Actions</th>
+                <th v-show="visibleColumns.orderId">Order ID</th>
+                <th v-show="visibleColumns.customer">Customer</th>
+                <th v-show="visibleColumns.product">Product</th>
+                <th v-show="visibleColumns.quantity">Quantity</th>
+                <th v-show="visibleColumns.total">Total</th>
+                <th v-show="visibleColumns.status">Status</th>
+                <th v-show="visibleColumns.channel">Channel</th>
+                <th v-show="visibleColumns.location">Location</th>
+                <th v-show="visibleColumns.orderDate">Order Date</th>
+                <th v-show="visibleColumns.actions">Actions</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="order in orders" :key="order.id">
-                <td>#{{ order.id }}</td>
-                <td>
+                <td v-show="visibleColumns.orderId">#{{ order.id }}</td>
+                <td v-show="visibleColumns.customer">
                   <div class="customer-info">
                     <strong>{{ order.customer_name }}</strong>
                     <br>
                     <small>{{ order.customer_email }}</small>
                   </div>
                 </td>
-                <td>{{ order.product_name }}</td>
-                <td>{{ order.quantity }}</td>
-                <td>${{ order.total_amount.toFixed(2) }}</td>
-                <td>
+                <td v-show="visibleColumns.product">{{ order.product_name }}</td>
+                <td v-show="visibleColumns.quantity">{{ order.quantity }}</td>
+                <td v-show="visibleColumns.total">${{ order.total_amount.toFixed(2) }}</td>
+                <td v-show="visibleColumns.status">
                   <span 
                     class="status-badge"
                     :class="{
@@ -83,8 +115,20 @@
                     {{ order.status }}
                   </span>
                 </td>
-                <td>{{ formatDate(order.created_at) }}</td>
-                <td>
+                <td v-show="visibleColumns.channel">
+                  <span v-if="order.channel" class="channel-badge">
+                    {{ order.channel }}
+                  </span>
+                  <span v-else class="no-data">-</span>
+                </td>
+                <td v-show="visibleColumns.location">
+                  <span v-if="order.location" class="location-badge">
+                    {{ order.location }}
+                  </span>
+                  <span v-else class="no-data">-</span>
+                </td>
+                <td v-show="visibleColumns.orderDate">{{ formatDate(order.created_at) }}</td>
+                <td v-show="visibleColumns.actions">
                   <div class="action-buttons">
                     <button 
                       class="btn btn-sm btn-edit" 
@@ -140,12 +184,12 @@
             </div>
             
             <div class="form-group">
-              <label for="customerEmail">Customer Email *</label>
+              <label for="customerEmail">Customer Info *</label>
               <input
                 id="customerEmail"
                 v-model="orderForm.customer_email"
-                type="email"
-                placeholder="Enter customer email"
+                type="text"
+                placeholder="Enter customer information"
                 required
               />
             </div>
@@ -214,6 +258,42 @@
             </div>
           </div>
           
+          <div class="form-row">
+            <div class="form-group">
+              <label for="channel">Channel</label>
+              <select
+                id="channel"
+                v-model="orderForm.channel"
+              >
+                <option value="">Select channel</option>
+                <option 
+                  v-for="channel in socialChannels" 
+                  :key="channel.name" 
+                  :value="channel.name"
+                >
+                  {{ channel.icon }} {{ channel.name }}
+                </option>
+              </select>
+            </div>
+            
+            <div class="form-group">
+              <label for="location">Location</label>
+              <select
+                id="location"
+                v-model="orderForm.location"
+              >
+                <option value="">Select location</option>
+                <option 
+                  v-for="province in cambodiaProvinces" 
+                  :key="province.name" 
+                  :value="province.name"
+                >
+                  {{ province.name }} ({{ province.type }})
+                </option>
+              </select>
+            </div>
+          </div>
+          
           <div class="form-group">
             <label for="notes">Notes</label>
             <textarea
@@ -278,9 +358,61 @@ interface Order {
   unit_price: number
   total_amount: number
   status: string
+  channel?: string
+  location?: string
   notes?: string
   created_at: string
 }
+
+// Hardcoded data interfaces
+interface Province {
+  name: string
+  type: 'Province' | 'City'
+  description: string
+}
+
+interface Channel {
+  name: string
+  type: string
+  description: string
+  icon: string
+}
+
+// Hardcoded data
+const cambodiaProvinces: Province[] = [
+  { name: "Phnom Penh", type: "City", description: "Capital city and largest urban center" },
+  { name: "Banteay Meanchey", type: "Province", description: "Northwestern province bordering Thailand" },
+  { name: "Battambang", type: "Province", description: "Major agricultural province in the northwest" },
+  { name: "Kampong Cham", type: "Province", description: "Central province along the Mekong River" },
+  { name: "Kampong Chhnang", type: "Province", description: "Central province known for pottery" },
+  { name: "Kampong Speu", type: "Province", description: "Province southwest of Phnom Penh" },
+  { name: "Kampong Thom", type: "Province", description: "Central province with ancient temples" },
+  { name: "Kampot", type: "Province", description: "Southern province famous for pepper" },
+  { name: "Kandal", type: "Province", description: "Province surrounding Phnom Penh" },
+  { name: "Kep", type: "City", description: "Coastal city and former beach resort" },
+  { name: "Koh Kong", type: "Province", description: "Southwestern province with pristine beaches" },
+  { name: "Kratie", type: "Province", description: "Northeastern province on the Mekong" },
+  { name: "Mondulkiri", type: "Province", description: "Eastern highland province with ethnic minorities" },
+  { name: "Oddar Meanchey", type: "Province", description: "Northern province bordering Thailand" },
+  { name: "Pailin", type: "City", description: "Former Khmer Rouge stronghold" },
+  { name: "Preah Sihanouk", type: "Province", description: "Coastal province with Sihanoukville city" },
+  { name: "Preah Vihear", type: "Province", description: "Northern province with ancient temple" },
+  { name: "Pursat", type: "Province", description: "Central province with Cardamom Mountains" },
+  { name: "Prey Veng", type: "Province", description: "Southeastern province with agricultural focus" },
+  { name: "Ratanakiri", type: "Province", description: "Northeastern highland province" },
+  { name: "Siem Reap", type: "Province", description: "Home to the famous Angkor temples" },
+  { name: "Stung Treng", type: "Province", description: "Northern province on the Mekong River" },
+  { name: "Svay Rieng", type: "Province", description: "Southeastern province bordering Vietnam" },
+  { name: "Takeo", type: "Province", description: "Southern province with ancient sites" },
+  { name: "Tbong Khmum", type: "Province", description: "Eastern province created in 2013" }
+]
+
+const socialChannels: Channel[] = [
+  { name: "Facebook", type: "Social Network", description: "World's largest social networking platform", icon: "📘" },
+  { name: "Instagram", type: "Photo Sharing", description: "Visual content sharing and social networking", icon: "📷" },
+  { name: "Telegram", type: "Messaging", description: "Secure messaging and communication platform", icon: "✈️" },
+  { name: "TikTok", type: "Video Platform", description: "Short-form video content and entertainment", icon: "🎵" }
+]
 
 // Reactive data
 const orders = ref<Order[]>([])
@@ -296,6 +428,35 @@ const showDeleteModal = ref(false)
 const isEditing = ref(false)
 const orderToDelete = ref<Order | null>(null)
 
+// Column visibility states
+const showColumnMenu = ref(false)
+const visibleColumns = ref({
+  orderId: true,
+  customer: true,
+  product: true,
+  quantity: true,
+  total: true,
+  status: true,
+  channel: true,
+  location: true,
+  orderDate: true,
+  actions: true
+})
+
+// Available columns configuration
+const availableColumns = [
+  { key: 'orderId', label: 'Order ID' },
+  { key: 'customer', label: 'Customer' },
+  { key: 'product', label: 'Product' },
+  { key: 'quantity', label: 'Quantity' },
+  { key: 'total', label: 'Total' },
+  { key: 'status', label: 'Status' },
+  { key: 'channel', label: 'Channel' },
+  { key: 'location', label: 'Location' },
+  { key: 'orderDate', label: 'Order Date' },
+  { key: 'actions', label: 'Actions' }
+]
+
 // Form data
 const orderForm = reactive({
   customer_name: '',
@@ -305,6 +466,8 @@ const orderForm = reactive({
   quantity: 1,
   unit_price: 0,
   status: '',
+  channel: '',
+  location: '',
   notes: ''
 })
 
@@ -428,6 +591,8 @@ const openEditModal = (order: Order) => {
     quantity: order.quantity,
     unit_price: order.unit_price,
     status: order.status,
+    channel: order.channel || '',
+    location: order.location || '',
     notes: order.notes || ''
   })
   showModal.value = true
@@ -444,6 +609,8 @@ const closeModal = () => {
     quantity: 1,
     unit_price: 0,
     status: '',
+    channel: '',
+    location: '',
     notes: ''
   })
   isEditing.value = false
@@ -459,6 +626,69 @@ const confirmDelete = (order: Order) => {
 const closeDeleteModal = () => {
   showDeleteModal.value = false
   orderToDelete.value = null
+}
+
+// Column toggle functions
+const toggleColumnMenu = () => {
+  showColumnMenu.value = !showColumnMenu.value
+}
+
+const getColumnVisibility = (columnKey: string) => {
+  return visibleColumns.value[columnKey as keyof typeof visibleColumns.value]
+}
+
+const toggleColumn = (columnKey: string) => {
+  const key = columnKey as keyof typeof visibleColumns.value
+  visibleColumns.value[key] = !visibleColumns.value[key]
+  saveColumnPreferences()
+}
+
+const showAllColumns = () => {
+  Object.keys(visibleColumns.value).forEach(key => {
+    (visibleColumns.value as any)[key] = true
+  })
+  saveColumnPreferences()
+}
+
+const hideAllColumns = () => {
+  Object.keys(visibleColumns.value).forEach(key => {
+    (visibleColumns.value as any)[key] = false
+  })
+  saveColumnPreferences()
+}
+
+const resetColumns = () => {
+  visibleColumns.value = {
+    orderId: true,
+    customer: true,
+    product: true,
+    quantity: true,
+    total: true,
+    status: true,
+    channel: true,
+    location: true,
+    orderDate: true,
+    actions: true
+  }
+  saveColumnPreferences()
+}
+
+// Save column preferences to localStorage
+const saveColumnPreferences = () => {
+  localStorage.setItem('orderColumns', JSON.stringify(visibleColumns.value))
+}
+
+// Load column preferences from localStorage
+const loadColumnPreferences = () => {
+  const saved = localStorage.getItem('orderColumns')
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved)
+      visibleColumns.value = { ...visibleColumns.value, ...parsed }
+    } catch (e) {
+      console.warn('Failed to load column preferences:', e)
+    }
+  }
 }
 
 // Save order (add or update)
@@ -530,6 +760,8 @@ const saveOrder = async () => {
       unit_price: orderForm.unit_price,
       total_amount: totalAmount,
       status: orderForm.status,
+      channel: orderForm.channel.trim() || null,
+      location: orderForm.location.trim() || null,
       notes: orderForm.notes.trim() || null
     }
     
@@ -605,6 +837,7 @@ const formatDate = (dateString: string) => {
 
 // Fetch data on component mount
 onMounted(async () => {
+  loadColumnPreferences() // Load saved column preferences
   await Promise.all([
     fetchOrders(),
     fetchProducts()
@@ -644,10 +877,118 @@ onMounted(async () => {
   align-items: center;
 }
 
+.action-left {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.action-right {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
 .action-bar .btn {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+/* Column Menu Styles */
+.column-menu {
+  background: white;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  margin-bottom: 2rem;
+  overflow: hidden;
+}
+
+.column-menu-header {
+  background: #f8f9fa;
+  padding: 1rem;
+  border-bottom: 1px solid #dee2e6;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.column-menu-header h3 {
+  margin: 0;
+  color: #2c3e50;
+  font-size: 1.1rem;
+}
+
+.menu-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: #6c757d;
+  cursor: pointer;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.menu-close:hover {
+  color: #495057;
+}
+
+.column-options {
+  padding: 1rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+}
+
+.column-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.column-option:hover {
+  background: #f8f9fa;
+}
+
+.column-option input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+
+.column-label {
+  font-size: 0.9rem;
+  color: #495057;
+  user-select: none;
+}
+
+.column-menu-actions {
+  padding: 1rem;
+  border-top: 1px solid #dee2e6;
+  background: #f8f9fa;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.btn-outline {
+  background: transparent;
+  border: 1px solid #dee2e6;
+  color: #6c757d;
+}
+
+.btn-outline:hover {
+  background: #f8f9fa;
+  border-color: #adb5bd;
+  color: #495057;
 }
 
 /* Loading State */
@@ -715,11 +1056,33 @@ onMounted(async () => {
   background: white;
   border-radius: 12px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
+  position: relative;
+}
+
+/* Scroll indicator */
+.table-container::-webkit-scrollbar {
+  height: 8px;
+}
+
+.table-container::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.table-container::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+.table-container::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
 }
 
 .orders-table {
   width: 100%;
+  min-width: 1000px; /* Ensure minimum width for all columns */
   border-collapse: collapse;
 }
 
@@ -730,16 +1093,56 @@ onMounted(async () => {
   padding: 1rem;
   text-align: left;
   border-bottom: 2px solid #dee2e6;
+  white-space: nowrap; /* Prevent text wrapping in headers */
 }
+
+/* Specific column widths for better layout */
+.orders-table th:nth-child(1), .orders-table td:nth-child(1) { width: 80px; } /* Order ID */
+.orders-table th:nth-child(2), .orders-table td:nth-child(2) { width: 150px; } /* Customer */
+.orders-table th:nth-child(3), .orders-table td:nth-child(3) { width: 120px; } /* Product */
+.orders-table th:nth-child(4), .orders-table td:nth-child(4) { width: 80px; } /* Quantity */
+.orders-table th:nth-child(5), .orders-table td:nth-child(5) { width: 100px; } /* Total */
+.orders-table th:nth-child(6), .orders-table td:nth-child(6) { width: 100px; } /* Status */
+.orders-table th:nth-child(7), .orders-table td:nth-child(7) { width: 100px; } /* Channel */
+.orders-table th:nth-child(8), .orders-table td:nth-child(8) { width: 120px; } /* Location */
+.orders-table th:nth-child(9), .orders-table td:nth-child(9) { width: 120px; } /* Order Date */
+.orders-table th:nth-child(10), .orders-table td:nth-child(10) { width: 100px; } /* Actions */
 
 .orders-table td {
   padding: 1rem;
   border-bottom: 1px solid #dee2e6;
   color: #495057;
+  white-space: nowrap; /* Prevent text wrapping in cells */
+  overflow: hidden;
+  text-overflow: ellipsis; /* Show ... for long text */
 }
 
 .orders-table tr:hover {
   background: #f8f9fa;
+}
+
+/* Badge Styles */
+.channel-badge {
+  background: #e3f2fd;
+  color: #1976d2;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.location-badge {
+  background: #f3e5f5;
+  color: #7b1fa2;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.no-data {
+  color: #6c757d;
+  font-style: italic;
 }
 
 .customer-info {
@@ -1043,6 +1446,22 @@ onMounted(async () => {
   .action-bar {
     flex-direction: column;
     align-items: stretch;
+  }
+  
+  /* Mobile table adjustments */
+  .table-container {
+    margin: 0 -1rem; /* Extend to screen edges on mobile */
+    border-radius: 0;
+  }
+  
+  .orders-table {
+    min-width: 800px; /* Reduce minimum width for mobile */
+  }
+  
+  /* Make some columns more compact on mobile */
+  .orders-table th, .orders-table td {
+    padding: 0.5rem;
+    font-size: 0.9rem;
   }
   
   .table-container {

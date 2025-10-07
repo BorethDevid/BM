@@ -26,6 +26,13 @@
         >
           Orders
         </NuxtLink>
+        <NuxtLink 
+          to="/data" 
+          class="navbar-tab"
+          :class="{ active: $route.path === '/data' }"
+        >
+          Data
+        </NuxtLink>
       </div>
     </div>
   </nav>
