@@ -228,6 +228,11 @@
 </template>
 
 <script setup lang="ts">
+// Apply authentication middleware
+definePageMeta({
+  middleware: 'auth'
+})
+
 // Stock management page with Supabase integration
 interface Product {
   id: number

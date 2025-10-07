@@ -1,14 +1,21 @@
 <template>
   <div>
-    <NavigationBar />
-    <main class="main-content">
+    <NavigationBar v-if="showNavigation" />
+    <main class="main-content" :class="{ 'no-nav': !showNavigation }">
       <NuxtPage />
     </main>
   </div>
 </template>
 
 <script setup lang="ts">
-// Main app component with navigation
+// Main app component with conditional navigation
+const route = useRoute()
+const { isAuthenticated } = useAuth()
+
+// Only show navigation bar for authenticated users and not on login page
+const showNavigation = computed(() => {
+  return isAuthenticated.value && route.path !== '/login'
+})
 </script>
 
 <style>
@@ -33,10 +40,19 @@ body {
   margin: 0 auto;
 }
 
+.main-content.no-nav {
+  min-height: 100vh;
+  padding: 0;
+}
+
 /* Responsive design */
 @media (max-width: 768px) {
   .main-content {
     padding: 1rem;
+  }
+  
+  .main-content.no-nav {
+    padding: 0;
   }
 }
 </style>

@@ -34,12 +34,27 @@
           Data
         </NuxtLink>
       </div>
+      <div class="navbar-user">
+        <div class="user-info">
+          <span class="user-name">{{ currentUser?.username }}</span>
+          <span class="user-role">{{ currentUser?.role }}</span>
+        </div>
+        <button @click="handleLogout" class="logout-btn">
+          <span>🚪</span> Logout
+        </button>
+      </div>
     </div>
   </nav>
 </template>
 
 <script setup lang="ts">
-// Navigation component with TypeScript support
+const { currentUser, logout } = useAuth()
+const router = useRouter()
+
+const handleLogout = () => {
+  logout()
+  router.push('/login')
+}
 </script>
 
 <style scoped>
@@ -99,6 +114,53 @@
 .navbar-tab.active:hover {
   color: #2980b9;
   border-bottom-color: #2980b9;
+}
+
+.navbar-user {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+}
+
+.user-name {
+  font-weight: 600;
+  color: #ecf0f1;
+  font-size: 0.9rem;
+}
+
+.user-role {
+  font-size: 0.75rem;
+  color: #bdc3c7;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.logout-btn {
+  background: rgba(231, 76, 60, 0.1);
+  border: 1px solid #e74c3c;
+  color: #e74c3c;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.logout-btn:hover {
+  background: #e74c3c;
+  color: white;
+  transform: translateY(-1px);
 }
 
 /* Responsive design */
