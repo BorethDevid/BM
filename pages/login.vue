@@ -82,7 +82,7 @@
 <script setup lang="ts">
 // Redirect if already logged in
 const router = useRouter()
-const { isAuthenticated, login } = useAuth()
+const { isAuthenticated, login, currentUser } = useAuth()
 
 // Check if already logged in on page load
 onMounted(() => {
@@ -104,7 +104,9 @@ const error = ref('')
 
 // Handle login
 const handleLogin = async () => {
+  console.log('=== LOGIN START ===')
   console.log('handleLogin called with:', loginForm.username, '***')
+  console.log('Current isAuthenticated:', isAuthenticated.value)
   
   if (!loginForm.username.trim() || !loginForm.password.trim()) {
     error.value = 'Please enter both username and password'
@@ -121,15 +123,47 @@ const handleLogin = async () => {
     const success = await login(loginForm.username.trim(), loginForm.password.trim())
     console.log('Login result:', success)
     console.log('isAuthenticated after login:', isAuthenticated.value)
+    console.log('currentUser after login:', currentUser.value)
     
     if (success) {
       console.log('Login successful, redirecting to dashboard')
-      // Small delay to ensure state is updated
-      await new Promise(resolve => setTimeout(resolve, 200))
+      
+      // Clear the form
+      loginForm.username = ''
+      loginForm.password = ''
+      
+      // Force a longer delay to ensure state is fully updated
+      console.log('Waiting for state to update...')
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      console.log('After delay - isAuthenticated:', isAuthenticated.value)
+      console.log('After delay - currentUser:', currentUser.value)
+      
+      // Check localStorage to ensure it's stored
+      if (typeof window !== 'undefined') {
+        const stored = localStorage.getItem('bm-auth')
+        console.log('localStorage after login:', stored)
+      }
+      
       console.log('About to navigate to /')
-      await navigateTo('/')
-      console.log('Navigation completed')
+      
+      // Force redirect using window.location as primary method
+      if (typeof window !== 'undefined') {
+        console.log('Using window.location.href for redirect')
+        window.location.href = '/'
+        return
+      }
+      
+      // Fallback methods
+      try {
+        await navigateTo('/')
+        console.log('Navigation completed with navigateTo')
+      } catch (navError) {
+        console.log('navigateTo failed, trying router.push:', navError)
+        await router.push('/')
+        console.log('Navigation completed with router.push')
+      }
     } else {
+      console.log('Login failed - invalid credentials')
       error.value = 'Invalid username or password'
     }
   } catch (err) {
@@ -137,6 +171,7 @@ const handleLogin = async () => {
     error.value = 'Login failed. Please try again.'
   } finally {
     loading.value = false
+    console.log('=== LOGIN END ===')
   }
 }
 
