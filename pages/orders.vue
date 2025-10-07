@@ -39,11 +39,146 @@
           <button class="btn btn-secondary" @click="fetchOrders">
             Refresh
           </button>
+          <button class="btn btn-outline" @click="toggleFilters">
+            <span>🔍</span> Filters
+          </button>
         </div>
         <div class="action-right">
           <button class="btn btn-outline" @click="toggleColumnMenu">
             <span>👁️</span> Columns
           </button>
+        </div>
+      </div>
+      
+      <!-- Filter Panel -->
+      <div v-if="showFilters" class="filter-panel">
+        <div class="filter-header">
+          <h3>🔍 Filter Orders</h3>
+          <button class="btn btn-sm btn-outline" @click="clearFilters">
+            Clear All
+          </button>
+        </div>
+        
+        <div class="filter-grid">
+          <!-- Date Range -->
+          <div class="filter-group">
+            <label>Date Range</label>
+            <div class="date-range">
+              <input 
+                type="date" 
+                v-model="filters.dateFrom" 
+                placeholder="From Date"
+                class="form-input"
+                title="From Date"
+              />
+              <input 
+                type="date" 
+                v-model="filters.dateTo" 
+                placeholder="To Date"
+                class="form-input"
+                title="To Date"
+              />
+            </div>
+          </div>
+          
+          <!-- Status Filter - COMMENTED OUT -->
+          <!-- <div class="filter-group">
+            <label>Status</label>
+            <select v-model="filters.status" class="form-select">
+              <option value="">All Statuses</option>
+              <option value="Pending">Pending</option>
+              <option value="Processing">Processing</option>
+              <option value="Shipped">Shipped</option>
+              <option value="Delivered">Delivered</option>
+              <option value="Cancelled">Cancelled</option>
+            </select>
+          </div> -->
+          
+          <!-- Channel Filter - COMMENTED OUT -->
+          <!-- <div class="filter-group">
+            <label>Channel</label>
+            <select v-model="filters.channel" class="form-select">
+              <option value="">All Channels</option>
+              <option v-for="channel in socialChannels" :key="channel.name" :value="channel.name">
+                {{ channel.name }}
+              </option>
+            </select>
+          </div> -->
+          
+          <!-- Location Filter - COMMENTED OUT -->
+          <!-- <div class="filter-group">
+            <label>Location</label>
+            <select v-model="filters.location" class="form-select">
+              <option value="">All Locations</option>
+              <option v-for="province in cambodiaProvinces" :key="province.name" :value="province.name">
+                {{ province.name }}
+              </option>
+            </select>
+          </div> -->
+          
+          <!-- Customer Name Search - COMMENTED OUT -->
+          <!-- <div class="filter-group">
+            <label>Customer Name</label>
+            <input 
+              type="text" 
+              v-model="filters.customerName" 
+              placeholder="Search customer name..."
+              class="form-input"
+            />
+          </div> -->
+          
+          <!-- Product Name Search - COMMENTED OUT -->
+          <!-- <div class="filter-group">
+            <label>Product Name</label>
+            <input 
+              type="text" 
+              v-model="filters.productName" 
+              placeholder="Search product name..."
+              class="form-input"
+            />
+          </div> -->
+          
+          <!-- Amount Range - COMMENTED OUT -->
+          <!-- <div class="filter-group">
+            <label>Amount Range</label>
+            <div class="amount-range">
+              <input 
+                type="number" 
+                v-model="filters.minAmount" 
+                placeholder="Min Amount"
+                class="form-input"
+                step="0.01"
+                min="0"
+              />
+              <input 
+                type="number" 
+                v-model="filters.maxAmount" 
+                placeholder="Max Amount"
+                class="form-input"
+                step="0.01"
+                min="0"
+              />
+            </div>
+          </div> -->
+        </div>
+        
+        <div class="filter-footer">
+          <div class="filter-stats">
+            <span v-if="!filtersApplied">
+              Showing all {{ totalOrders }} orders
+            </span>
+            <span v-else>
+              Showing {{ filteredOrders.length }} of {{ totalOrders }} orders (filtered)
+            </span>
+          </div>
+          <div class="filter-actions">
+            <button class="btn btn-sm btn-outline" @click="clearFilters">
+              Clear
+            </button>
+            <button class="btn btn-sm btn-primary" @click="applyFilters">
+              Apply Filters
+            </button>
+          </div>
         </div>
       </div>
       
@@ -76,33 +211,58 @@
           <table class="orders-table">
             <thead>
               <tr>
-                <th v-show="visibleColumns.orderId">Order ID</th>
-                <th v-show="visibleColumns.customer">Customer</th>
-                <th v-show="visibleColumns.product">Product</th>
-                <th v-show="visibleColumns.quantity">Quantity</th>
-                <th v-show="visibleColumns.total">Total</th>
-                <th v-show="visibleColumns.status">Status</th>
-                <th v-show="visibleColumns.channel">Channel</th>
-                <th v-show="visibleColumns.location">Location</th>
-                <th v-show="visibleColumns.orderDate">Order Date</th>
-                <th v-show="visibleColumns.actions">Actions</th>
+                <th 
+                  v-for="columnKey in columnOrder" 
+                  :key="columnKey"
+                  v-show="getColumnVisibility(columnKey)"
+                  :draggable="true"
+                  @dragstart="handleDragStart($event, columnKey)"
+                  @dragover="handleDragOver($event, columnKey)"
+                  @dragleave="handleDragLeave"
+                  @drop="handleDrop($event, columnKey)"
+                  @dragend="handleDragEnd"
+                  :class="{
+                    'dragging': draggedColumn === columnKey,
+                    'drag-over': dragOverColumn === columnKey
+                  }"
+                  class="draggable-header"
+                >
+                  <div class="header-content">
+                    <span class="drag-handle">⋮⋮</span>
+                    <span class="header-text">{{ getColumnLabel(columnKey) }}</span>
+                  </div>
+                </th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="order in orders" :key="order.id">
-                <td v-show="visibleColumns.orderId">#{{ order.id }}</td>
-                <td v-show="visibleColumns.customer">
-                  <div class="customer-info">
+              <tr v-for="order in filteredOrders" :key="order.id">
+                <td 
+                  v-for="columnKey in columnOrder" 
+                  :key="columnKey"
+                  v-show="getColumnVisibility(columnKey)"
+                >
+                  <!-- Order ID -->
+                  <span v-if="columnKey === 'orderId'">#{{ order.id }}</span>
+                  
+                  <!-- Customer -->
+                  <div v-else-if="columnKey === 'customer'" class="customer-info">
                     <strong>{{ order.customer_name }}</strong>
                     <br>
                     <small>{{ order.customer_email }}</small>
                   </div>
-                </td>
-                <td v-show="visibleColumns.product">{{ order.product_name }}</td>
-                <td v-show="visibleColumns.quantity">{{ order.quantity }}</td>
-                <td v-show="visibleColumns.total">${{ order.total_amount.toFixed(2) }}</td>
-                <td v-show="visibleColumns.status">
+                  
+                  <!-- Product -->
+                  <span v-else-if="columnKey === 'product'">{{ order.product_name }}</span>
+                  
+                  <!-- Quantity -->
+                  <span v-else-if="columnKey === 'quantity'">{{ order.quantity }}</span>
+                  
+                  <!-- Total -->
+                  <span v-else-if="columnKey === 'total'">${{ order.total_amount.toFixed(2) }}</span>
+                  
+                  <!-- Status -->
                   <span 
+                    v-else-if="columnKey === 'status'"
                     class="status-badge"
                     :class="{
                       'pending': order.status === 'Pending',
@@ -114,22 +274,30 @@
                   >
                     {{ order.status }}
                   </span>
-                </td>
-                <td v-show="visibleColumns.channel">
-                  <span v-if="order.channel" class="channel-badge">
-                    {{ order.channel }}
+                  
+                  <!-- Channel -->
+                  <span v-else-if="columnKey === 'channel'">
+                    <span v-if="order.channel" class="channel-badge">
+                      {{ order.channel }}
+                    </span>
+                    <span v-else class="no-data">-</span>
                   </span>
-                  <span v-else class="no-data">-</span>
-                </td>
-                <td v-show="visibleColumns.location">
-                  <span v-if="order.location" class="location-badge">
-                    {{ order.location }}
+                  
+                  <!-- Location -->
+                  <span v-else-if="columnKey === 'location'">
+                    <span v-if="order.location" class="location-badge">
+                      {{ order.location }}
+                    </span>
+                    <span v-else class="no-data">-</span>
                   </span>
-                  <span v-else class="no-data">-</span>
-                </td>
-                <td v-show="visibleColumns.orderDate">{{ formatDate(order.created_at) }}</td>
-                <td v-show="visibleColumns.actions">
-                  <div class="action-buttons">
+                  
+                  <!-- Order Date -->
+                  <span v-else-if="columnKey === 'orderDate'">
+                    {{ order.order_date ? formatDate(order.order_date) : formatDate(order.created_at) }}
+                  </span>
+                  
+                  <!-- Actions -->
+                  <div v-else-if="columnKey === 'actions'" class="action-buttons">
                     <button 
                       class="btn btn-sm btn-edit" 
                       @click="openEditModal(order)"
@@ -294,6 +462,23 @@
             </div>
           </div>
           
+          <div class="form-row">
+            <div class="form-group">
+              <label for="orderDate">Order Date</label>
+              <input
+                id="orderDate"
+                v-model="orderForm.order_date"
+                type="date"
+                :max="getCurrentDate()"
+                placeholder="Select order date"
+              />
+            </div>
+            
+            <div class="form-group">
+              <!-- Empty div for layout balance -->
+            </div>
+          </div>
+          
           <div class="form-group">
             <label for="notes">Notes</label>
             <textarea
@@ -360,6 +545,7 @@ interface Order {
   status: string
   channel?: string
   location?: string
+  order_date?: string
   notes?: string
   created_at: string
 }
@@ -378,41 +564,6 @@ interface Channel {
   icon: string
 }
 
-// Hardcoded data
-const cambodiaProvinces: Province[] = [
-  { name: "Phnom Penh", type: "City", description: "Capital city and largest urban center" },
-  { name: "Banteay Meanchey", type: "Province", description: "Northwestern province bordering Thailand" },
-  { name: "Battambang", type: "Province", description: "Major agricultural province in the northwest" },
-  { name: "Kampong Cham", type: "Province", description: "Central province along the Mekong River" },
-  { name: "Kampong Chhnang", type: "Province", description: "Central province known for pottery" },
-  { name: "Kampong Speu", type: "Province", description: "Province southwest of Phnom Penh" },
-  { name: "Kampong Thom", type: "Province", description: "Central province with ancient temples" },
-  { name: "Kampot", type: "Province", description: "Southern province famous for pepper" },
-  { name: "Kandal", type: "Province", description: "Province surrounding Phnom Penh" },
-  { name: "Kep", type: "City", description: "Coastal city and former beach resort" },
-  { name: "Koh Kong", type: "Province", description: "Southwestern province with pristine beaches" },
-  { name: "Kratie", type: "Province", description: "Northeastern province on the Mekong" },
-  { name: "Mondulkiri", type: "Province", description: "Eastern highland province with ethnic minorities" },
-  { name: "Oddar Meanchey", type: "Province", description: "Northern province bordering Thailand" },
-  { name: "Pailin", type: "City", description: "Former Khmer Rouge stronghold" },
-  { name: "Preah Sihanouk", type: "Province", description: "Coastal province with Sihanoukville city" },
-  { name: "Preah Vihear", type: "Province", description: "Northern province with ancient temple" },
-  { name: "Pursat", type: "Province", description: "Central province with Cardamom Mountains" },
-  { name: "Prey Veng", type: "Province", description: "Southeastern province with agricultural focus" },
-  { name: "Ratanakiri", type: "Province", description: "Northeastern highland province" },
-  { name: "Siem Reap", type: "Province", description: "Home to the famous Angkor temples" },
-  { name: "Stung Treng", type: "Province", description: "Northern province on the Mekong River" },
-  { name: "Svay Rieng", type: "Province", description: "Southeastern province bordering Vietnam" },
-  { name: "Takeo", type: "Province", description: "Southern province with ancient sites" },
-  { name: "Tbong Khmum", type: "Province", description: "Eastern province created in 2013" }
-]
-
-const socialChannels: Channel[] = [
-  { name: "Facebook", type: "Social Network", description: "World's largest social networking platform", icon: "📘" },
-  { name: "Instagram", type: "Photo Sharing", description: "Visual content sharing and social networking", icon: "📷" },
-  { name: "Telegram", type: "Messaging", description: "Secure messaging and communication platform", icon: "✈️" },
-  { name: "TikTok", type: "Video Platform", description: "Short-form video content and entertainment", icon: "🎵" }
-]
 
 // Reactive data
 const orders = ref<Order[]>([])
@@ -426,6 +577,7 @@ const deleting = ref(false)
 const showModal = ref(false)
 const showDeleteModal = ref(false)
 const isEditing = ref(false)
+const orderToEdit = ref<Order | null>(null)
 const orderToDelete = ref<Order | null>(null)
 
 // Column visibility states
@@ -437,11 +589,59 @@ const visibleColumns = ref({
   quantity: true,
   total: true,
   status: true,
-  channel: true,
-  location: true,
+  channel: false, // Hidden by default
+  location: false, // Hidden by default
   orderDate: true,
   actions: true
 })
+
+// Column order state
+const columnOrder = ref([
+  'orderId',
+  'customer', 
+  'product',
+  'quantity',
+  'total',
+  'status',
+  'channel',
+  'location',
+  'orderDate',
+  'actions'
+])
+
+// Filter states
+const showFilters = ref(false)
+const filtersApplied = ref(false) // Track if filters are currently applied
+const filters = ref({
+  dateFrom: '',
+  dateTo: '',
+  status: '',
+  channel: '',
+  location: '',
+  customerName: '',
+  productName: '',
+  minAmount: '',
+  maxAmount: ''
+})
+
+
+// Drag and drop states
+const draggedColumn = ref<string | null>(null)
+const dragOverColumn = ref<string | null>(null)
+
+// Default column visibility (for reset function)
+const defaultColumnVisibility = {
+  orderId: true,
+  customer: true,
+  product: true,
+  quantity: true,
+  total: true,
+  status: true,
+  channel: false,
+  location: false,
+  orderDate: true,
+  actions: true
+}
 
 // Available columns configuration
 const availableColumns = [
@@ -468,8 +668,45 @@ const orderForm = reactive({
   status: '',
   channel: '',
   location: '',
+  order_date: '',
   notes: ''
 })
+
+// Hardcoded data for filter dropdowns
+const socialChannels = ref([
+  { name: "Facebook", type: "Social Network", description: "World's largest social networking platform", icon: "📘" },
+  { name: "Instagram", type: "Photo Sharing", description: "Visual content sharing and social networking", icon: "📷" },
+  { name: "Telegram", type: "Messaging", description: "Secure messaging and communication platform", icon: "✈️" },
+  { name: "TikTok", type: "Video Platform", description: "Short-form video content and entertainment", icon: "🎵" }
+])
+
+const cambodiaProvinces = ref([
+  { name: "Phnom Penh", type: "City", description: "Capital city and largest urban center" },
+  { name: "Battambang", type: "Province", description: "Northwestern province known for agriculture" },
+  { name: "Siem Reap", type: "Province", description: "Home to the famous Angkor temples" },
+  { name: "Kampong Cham", type: "Province", description: "Eastern province along the Mekong River" },
+  { name: "Kampong Thom", type: "Province", description: "Central province with historical significance" },
+  { name: "Kampong Chhnang", type: "Province", description: "Central province known for pottery" },
+  { name: "Kampong Speu", type: "Province", description: "Southwestern province with agricultural focus" },
+  { name: "Kandal", type: "Province", description: "Province surrounding Phnom Penh" },
+  { name: "Koh Kong", type: "Province", description: "Southwestern coastal province" },
+  { name: "Kratie", type: "Province", description: "Northeastern province along the Mekong" },
+  { name: "Mondulkiri", type: "Province", description: "Eastern highland province" },
+  { name: "Oddar Meanchey", type: "Province", description: "Northern border province" },
+  { name: "Pailin", type: "Province", description: "Western province with gem mining history" },
+  { name: "Preah Vihear", type: "Province", description: "Northern province with ancient temples" },
+  { name: "Prey Veng", type: "Province", description: "Southeastern agricultural province" },
+  { name: "Pursat", type: "Province", description: "Central province with Cardamom Mountains" },
+  { name: "Ratanakiri", type: "Province", description: "Northeastern highland province" },
+  { name: "Sihanoukville", type: "Province", description: "Coastal province with beaches and ports" },
+  { name: "Stung Treng", type: "Province", description: "Northern province along the Mekong" },
+  { name: "Svay Rieng", type: "Province", description: "Southeastern border province" },
+  { name: "Takeo", type: "Province", description: "Southern province with historical sites" },
+  { name: "Kampot", type: "Province", description: "Southern province known for pepper" },
+  { name: "Kep", type: "Province", description: "Small coastal province" },
+  { name: "Tboung Khmum", type: "Province", description: "Eastern province split from Kampong Cham" },
+  { name: "Preah Sihanouk", type: "Province", description: "Coastal province with major port" }
+])
 
 // Fetch products from Supabase
 const fetchProducts = async () => {
@@ -573,6 +810,9 @@ const openAddModal = () => {
     quantity: 1,
     unit_price: 0,
     status: '',
+    channel: '',
+    location: '',
+    order_date: getCurrentDate(), // Set default to today
     notes: ''
   })
   showModal.value = true
@@ -581,6 +821,8 @@ const openAddModal = () => {
 // Open edit modal
 const openEditModal = (order: Order) => {
   isEditing.value = true
+  orderToEdit.value = order // Store the order being edited
+  
   // Find the product ID for the selected product
   const product = products.value.find((p: {id: number, name: string, price: number, stock_quantity: number}) => p.name === order.product_name)
   Object.assign(orderForm, {
@@ -593,6 +835,7 @@ const openEditModal = (order: Order) => {
     status: order.status,
     channel: order.channel || '',
     location: order.location || '',
+    order_date: order.order_date || '',
     notes: order.notes || ''
   })
   showModal.value = true
@@ -611,9 +854,11 @@ const closeModal = () => {
     status: '',
     channel: '',
     location: '',
+    order_date: '',
     notes: ''
   })
   isEditing.value = false
+  orderToEdit.value = null // Clear the order being edited
 }
 
 // Confirm delete
@@ -658,18 +903,7 @@ const hideAllColumns = () => {
 }
 
 const resetColumns = () => {
-  visibleColumns.value = {
-    orderId: true,
-    customer: true,
-    product: true,
-    quantity: true,
-    total: true,
-    status: true,
-    channel: true,
-    location: true,
-    orderDate: true,
-    actions: true
-  }
+  visibleColumns.value = { ...defaultColumnVisibility }
   saveColumnPreferences()
 }
 
@@ -684,11 +918,104 @@ const loadColumnPreferences = () => {
   if (saved) {
     try {
       const parsed = JSON.parse(saved)
-      visibleColumns.value = { ...visibleColumns.value, ...parsed }
+      visibleColumns.value = { ...defaultColumnVisibility, ...parsed }
     } catch (e) {
       console.warn('Failed to load column preferences:', e)
+      visibleColumns.value = { ...defaultColumnVisibility }
+    }
+  } else {
+    // First time user - use default visibility
+    visibleColumns.value = { ...defaultColumnVisibility }
+  }
+}
+
+// Load column order from localStorage
+const loadColumnOrder = () => {
+  const saved = localStorage.getItem('orderColumnOrder')
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved)
+      columnOrder.value = parsed
+    } catch (e) {
+      console.warn('Failed to load column order:', e)
     }
   }
+}
+
+// Save column order to localStorage
+const saveColumnOrder = () => {
+  localStorage.setItem('orderColumnOrder', JSON.stringify(columnOrder.value))
+}
+
+// Drag and drop functions
+const handleDragStart = (event: DragEvent, columnKey: string) => {
+  draggedColumn.value = columnKey
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', columnKey)
+  }
+}
+
+const handleDragOver = (event: DragEvent, columnKey: string) => {
+  event.preventDefault()
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = 'move'
+  }
+  dragOverColumn.value = columnKey
+}
+
+const handleDragLeave = () => {
+  dragOverColumn.value = null
+}
+
+const handleDrop = (event: DragEvent, targetColumnKey: string) => {
+  event.preventDefault()
+  
+  if (!draggedColumn.value || draggedColumn.value === targetColumnKey) {
+    dragOverColumn.value = null
+    draggedColumn.value = null
+    return
+  }
+
+  // Reorder columns
+  const draggedIndex = columnOrder.value.indexOf(draggedColumn.value)
+  const targetIndex = columnOrder.value.indexOf(targetColumnKey)
+  
+  if (draggedIndex !== -1 && targetIndex !== -1) {
+    // Remove dragged column from its current position
+    const draggedItem = columnOrder.value.splice(draggedIndex, 1)[0]
+    
+    if (draggedItem) {
+      // Insert at new position
+      if (draggedIndex < targetIndex) {
+        columnOrder.value.splice(targetIndex - 1, 0, draggedItem)
+      } else {
+        columnOrder.value.splice(targetIndex, 0, draggedItem)
+      }
+      
+      saveColumnOrder()
+    }
+  }
+  
+  dragOverColumn.value = null
+  draggedColumn.value = null
+}
+
+const handleDragEnd = () => {
+  dragOverColumn.value = null
+  draggedColumn.value = null
+}
+
+// Get column label for display
+const getColumnLabel = (columnKey: string) => {
+  const column = availableColumns.find(col => col.key === columnKey)
+  return column ? column.label : columnKey
+}
+
+// Get current date in YYYY-MM-DD format
+const getCurrentDate = () => {
+  const today = new Date()
+  return today.toISOString().split('T')[0]
 }
 
 // Save order (add or update)
@@ -752,7 +1079,8 @@ const saveOrder = async () => {
     // Calculate total amount
     const totalAmount = orderForm.quantity * orderForm.unit_price
     
-    const orderData = {
+    // Prepare order data with fallback for missing columns
+    const orderData: any = {
       customer_name: orderForm.customer_name.trim(),
       customer_email: orderForm.customer_email.trim(),
       product_name: orderForm.product_name.trim(),
@@ -760,9 +1088,29 @@ const saveOrder = async () => {
       unit_price: orderForm.unit_price,
       total_amount: totalAmount,
       status: orderForm.status,
-      channel: orderForm.channel.trim() || null,
-      location: orderForm.location.trim() || null,
       notes: orderForm.notes.trim() || null
+    }
+    
+    // Add optional fields only if they have values
+    if (orderForm.channel && orderForm.channel.trim()) {
+      orderData.channel = orderForm.channel.trim()
+    }
+    
+    if (orderForm.location && orderForm.location.trim()) {
+      orderData.location = orderForm.location.trim()
+    }
+    
+    if (orderForm.order_date && orderForm.order_date.trim()) {
+      orderData.order_date = orderForm.order_date.trim()
+    }
+    
+    // Validate numeric fields
+    if (isNaN(orderForm.quantity) || orderForm.quantity <= 0) {
+      throw new Error('Quantity must be a positive number')
+    }
+    
+    if (isNaN(orderForm.unit_price) || orderForm.unit_price < 0) {
+      throw new Error('Unit price must be a non-negative number')
     }
     
     // Debug: Log the order data to check if product_name is set
@@ -772,10 +1120,20 @@ const saveOrder = async () => {
     
     if (isEditing.value) {
       // Update existing order
-      const { update } = useSupabaseDB()
-      const { error } = await update('orders', orderData).eq('id', orderToDelete.value?.id)
+      if (!orderToEdit.value?.id) {
+        throw new Error('Order ID is missing. Cannot update order.')
+      }
       
-      if (error) throw error
+      console.log('Updating order with ID:', orderToEdit.value.id)
+      console.log('Update data:', orderData)
+      
+      const { update } = useSupabaseDB()
+      const { error } = await update('orders', orderData).eq('id', orderToEdit.value.id)
+      
+      if (error) {
+        console.error('Update error:', error)
+        throw error
+      }
     } else {
       // Add new order
       const { insert } = useSupabaseDB()
@@ -789,7 +1147,26 @@ const saveOrder = async () => {
     
   } catch (err) {
     console.error('Error saving order:', err)
-    alert('Failed to save order. Please try again.')
+    
+    // More detailed error message
+    let errorMessage = 'Failed to save order. Please try again.'
+    
+    if (err && typeof err === 'object' && 'message' in err) {
+      const errorMsg = (err as any).message
+      console.error('Detailed error:', errorMsg)
+      
+      if (errorMsg.includes('column') && errorMsg.includes('does not exist')) {
+        errorMessage = 'Database schema error: Missing column. Please run the database update queries.'
+      } else if (errorMsg.includes('permission')) {
+        errorMessage = 'Permission denied. Please check your database permissions.'
+      } else if (errorMsg.includes('connection')) {
+        errorMessage = 'Connection error. Please check your internet connection.'
+      } else {
+        errorMessage = `Error: ${errorMsg}`
+      }
+    }
+    
+    alert(errorMessage)
   } finally {
     saving.value = false
   }
@@ -818,26 +1195,170 @@ const deleteOrder = async () => {
   }
 }
 
-// Format date with time
+// Format date (date only, no time)
 const formatDate = (dateString: string) => {
+  if (!dateString) return '-'
+  
   const date = new Date(dateString)
+  
+  // Check if date is valid
+  if (isNaN(date.getTime())) {
+    return 'Invalid Date'
+  }
+  
+  // Get user's local timezone
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+  
+  // Format date using local timezone (date only, no time)
   const dateStr = date.toLocaleDateString('en-US', {
     year: 'numeric',
     month: '2-digit',
-    day: '2-digit'
+    day: '2-digit',
+    timeZone: timeZone
   })
-  const timeStr = date.toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: true
-  })
-  return `${dateStr} ${timeStr}`
+  
+  return dateStr
 }
+
+// Test database connection
+const testDatabaseConnection = async () => {
+  try {
+    const { select } = useSupabaseDB()
+    const { data, error } = await select('orders').limit(1)
+    
+    if (error) {
+      console.error('Database connection test failed:', error)
+      return false
+    }
+    
+    console.log('Database connection test passed')
+    return true
+  } catch (err) {
+    console.error('Database connection test error:', err)
+    return false
+  }
+}
+
+// Filter functions
+const toggleFilters = () => {
+  showFilters.value = !showFilters.value
+}
+
+const clearFilters = () => {
+  filters.value = {
+    dateFrom: '',
+    dateTo: '',
+    status: '',
+    channel: '',
+    location: '',
+    customerName: '',
+    productName: '',
+    minAmount: '',
+    maxAmount: ''
+  }
+  filtersApplied.value = false // Clear applied state
+}
+
+const applyFilters = () => {
+  // Apply the current filter settings
+  filtersApplied.value = true
+  console.log('Filters applied:', filters.value)
+}
+
+// Computed properties for filtering
+const totalOrders = computed(() => orders.value.length)
+const totalAmount = computed(() => 
+  orders.value.reduce((sum: number, order: Order) => sum + order.total_amount, 0)
+)
+
+// Filtered orders based on current filters (only when filters are applied)
+const filteredOrders = computed(() => {
+  // If filters are not applied, show all orders
+  if (!filtersApplied.value) {
+    return orders.value
+  }
+  
+  let filtered = [...orders.value]
+  
+  // Date range filter
+  if (filters.value.dateFrom) {
+    const fromDate = new Date(filters.value.dateFrom)
+    filtered = filtered.filter(order => {
+      const orderDate = new Date(order.order_date || order.created_at)
+      return orderDate >= fromDate
+    })
+  }
+  
+  if (filters.value.dateTo) {
+    const toDate = new Date(filters.value.dateTo)
+    toDate.setHours(23, 59, 59, 999) // Include the entire day
+    filtered = filtered.filter(order => {
+      const orderDate = new Date(order.order_date || order.created_at)
+      return orderDate <= toDate
+    })
+  }
+  
+  // Status filter - COMMENTED OUT
+  // if (filters.value.status) {
+  //   filtered = filtered.filter(order => order.status === filters.value.status)
+  // }
+  
+  // Channel filter - COMMENTED OUT
+  // if (filters.value.channel) {
+  //   filtered = filtered.filter(order => order.channel === filters.value.channel)
+  // }
+  
+  // Location filter - COMMENTED OUT
+  // if (filters.value.location) {
+  //   filtered = filtered.filter(order => order.location === filters.value.location)
+  // }
+  
+  // Customer name filter - COMMENTED OUT
+  // if (filters.value.customerName) {
+  //   const searchTerm = filters.value.customerName.toLowerCase()
+  //   filtered = filtered.filter(order => 
+  //     order.customer_name.toLowerCase().includes(searchTerm)
+  //   )
+  // }
+  
+  // Product name filter - COMMENTED OUT
+  // if (filters.value.productName) {
+  //   const searchTerm = filters.value.productName.toLowerCase()
+  //   filtered = filtered.filter(order => 
+  //     order.product_name.toLowerCase().includes(searchTerm)
+  //   )
+  // }
+  
+  // Amount range filter - COMMENTED OUT
+  // if (filters.value.minAmount) {
+  //   const minAmount = parseFloat(filters.value.minAmount)
+  //   if (!isNaN(minAmount)) {
+  //     filtered = filtered.filter(order => order.total_amount >= minAmount)
+  //   }
+  // }
+  
+  // if (filters.value.maxAmount) {
+  //   const maxAmount = parseFloat(filters.value.maxAmount)
+  //   if (!isNaN(maxAmount)) {
+  //     filtered = filtered.filter(order => order.total_amount <= maxAmount)
+  //   }
+  // }
+  
+  return filtered
+})
 
 // Fetch data on component mount
 onMounted(async () => {
   loadColumnPreferences() // Load saved column preferences
+  loadColumnOrder() // Load saved column order
+  
+  // Test database connection first
+  const connectionOk = await testDatabaseConnection()
+  if (!connectionOk) {
+    error.value = 'Database connection failed. Please check your Supabase configuration.'
+    return
+  }
+  
   await Promise.all([
     fetchOrders(),
     fetchProducts()
@@ -893,6 +1414,107 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+/* Filter Panel Styles */
+.filter-panel {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.filter-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.filter-header h3 {
+  margin: 0;
+  color: #374151;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.filter-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+  max-width: 600px;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0.5rem;
+}
+
+.filter-group label {
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.date-range,
+.amount-range {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.date-range input,
+.amount-range input {
+  flex: 1;
+  min-width: 120px;
+}
+
+.form-input,
+.form-select {
+  padding: 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  transition: border-color 0.2s;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.form-input:focus,
+.form-select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.filter-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.filter-stats {
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.filter-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-sm {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
 }
 
 /* Column Menu Styles */
@@ -1094,6 +1716,57 @@ onMounted(async () => {
   text-align: left;
   border-bottom: 2px solid #dee2e6;
   white-space: nowrap; /* Prevent text wrapping in headers */
+  position: relative;
+  user-select: none;
+}
+
+/* Draggable header styles */
+.draggable-header {
+  cursor: move;
+  transition: all 0.2s ease;
+}
+
+.draggable-header:hover {
+  background: #e9ecef;
+}
+
+.draggable-header.dragging {
+  opacity: 0.5;
+  background: #dee2e6;
+}
+
+.draggable-header.drag-over {
+  background: #007bff;
+  color: white;
+  border-left: 3px solid #0056b3;
+  border-right: 3px solid #0056b3;
+}
+
+.header-content {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.drag-handle {
+  color: #6c757d;
+  font-size: 0.8rem;
+  cursor: grab;
+  user-select: none;
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+}
+
+.draggable-header:hover .drag-handle {
+  opacity: 1;
+}
+
+.draggable-header.dragging .drag-handle {
+  cursor: grabbing;
+}
+
+.header-text {
+  flex: 1;
 }
 
 /* Specific column widths for better layout */
@@ -1446,6 +2119,32 @@ onMounted(async () => {
   .action-bar {
     flex-direction: column;
     align-items: stretch;
+  }
+  
+  .filter-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .date-range,
+  .amount-range {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .date-range input,
+  .amount-range input {
+    min-width: unset;
+  }
+  
+  .filter-footer {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: stretch;
+  }
+  
+  .filter-actions {
+    justify-content: center;
   }
   
   /* Mobile table adjustments */
