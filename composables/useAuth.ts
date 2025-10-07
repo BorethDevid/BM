@@ -21,9 +21,7 @@ export const useAuth = () => {
           const authData = JSON.parse(stored)
           isAuthenticated.value = authData.isAuthenticated
           currentUser.value = authData.user
-          console.log('🔄 Auth state restored from localStorage:', authData)
         } catch (e) {
-          console.log('❌ Invalid localStorage data, clearing')
           localStorage.removeItem('bm-auth')
         }
       }
@@ -32,8 +30,6 @@ export const useAuth = () => {
 
   // Login function with database verification
   const login = async (username: string, password: string): Promise<boolean> => {
-    console.log('=== useAuth LOGIN START ===')
-    console.log('useAuth login called with:', username, '***')
     loading.value = true
     
     try {
@@ -47,25 +43,16 @@ export const useAuth = () => {
       })
       
       if (response.error) {
-        console.log('❌ Database error:', response.error)
-        console.log('=== useAuth LOGIN END (ERROR) ===')
         return false
       }
       
       if (response.data && response.data.user) {
-        console.log('✅ Database credentials verified')
-        
         // Set state
         isAuthenticated.value = true
         currentUser.value = { 
           username: response.data.user.username, 
           role: response.data.user.role 
         }
-        
-        console.log('✅ Auth state set:', { 
-          isAuthenticated: isAuthenticated.value, 
-          currentUser: currentUser.value 
-        })
         
         // Store in localStorage
         if (typeof window !== 'undefined') {
@@ -74,20 +61,13 @@ export const useAuth = () => {
             user: currentUser.value
           }
           localStorage.setItem('bm-auth', JSON.stringify(authData))
-          console.log('✅ Stored in localStorage:', authData)
         }
         
-        console.log('✅ Login successful, returning true')
-        console.log('=== useAuth LOGIN END (SUCCESS) ===')
         return true
       } else {
-        console.log('❌ Invalid credentials - user not found or password incorrect')
-        console.log('=== useAuth LOGIN END (FAILED) ===')
         return false
       }
     } catch (error) {
-      console.error('❌ Login error:', error)
-      console.log('=== useAuth LOGIN END (ERROR) ===')
       return false
     } finally {
       loading.value = false
@@ -100,7 +80,7 @@ export const useAuth = () => {
     currentUser.value = null
     
     // Clear localStorage
-    if (process.client) {
+    if (typeof window !== 'undefined') {
       localStorage.removeItem('bm-auth')
     }
   }
@@ -117,7 +97,9 @@ export const useAuth = () => {
 
   // Initialize auth on client side
   onMounted(() => {
-    initAuth()
+    if (typeof window !== 'undefined') {
+      initAuth()
+    }
   })
 
   return {
