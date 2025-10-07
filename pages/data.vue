@@ -59,6 +59,11 @@
 </template>
 
 <script setup lang="ts">
+// Apply authentication middleware
+definePageMeta({
+  middleware: 'auth'
+})
+
 // Data management page with hardcoded reference data
 
 interface Province {

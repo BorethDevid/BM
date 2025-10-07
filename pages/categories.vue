@@ -173,6 +173,11 @@
 </template>
 
 <script setup lang="ts">
+// Apply authentication middleware
+definePageMeta({
+  middleware: 'auth'
+})
+
 // Category management page
 interface Category {
   id: number
