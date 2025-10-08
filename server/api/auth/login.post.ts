@@ -14,19 +14,14 @@ export default defineEventHandler(async (event) => {
       }
     }
 
-    // Initialize Supabase client
-    const supabaseUrl = process.env.SUPABASE_URL
-    const supabaseKey = process.env.SUPABASE_ANON_KEY
-
-    console.log('🔧 Supabase config check:', { 
-      url: supabaseUrl ? 'Set' : 'Missing', 
-      key: supabaseKey ? 'Set' : 'Missing' 
-    })
+    // Initialize Supabase client using runtime config
+    const config = useRuntimeConfig()
+    const supabaseUrl = config.supabaseUrl
+    const supabaseKey = config.supabaseAnonKey
 
     if (!supabaseUrl || !supabaseKey) {
-      console.log('❌ Missing Supabase configuration')
       return {
-        error: 'Database configuration missing',
+        error: 'Database configuration missing. Please check environment variables.',
         data: null
       }
     }

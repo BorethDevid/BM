@@ -2,16 +2,17 @@ import { createClient } from '@supabase/supabase-js'
 
 export default defineEventHandler(async (event) => {
   try {
-    // Initialize Supabase client
-    const supabaseUrl = process.env.SUPABASE_URL
-    const supabaseKey = process.env.SUPABASE_ANON_KEY
+        // Initialize Supabase client using runtime config
+        const config = useRuntimeConfig()
+        const supabaseUrl = config.supabaseUrl
+        const supabaseKey = config.supabaseAnonKey
 
-    if (!supabaseUrl || !supabaseKey) {
-      return {
-        error: 'Database configuration missing',
-        data: null
-      }
-    }
+        if (!supabaseUrl || !supabaseKey) {
+          return {
+            error: 'Database configuration missing. Please check environment variables.',
+            data: null
+          }
+        }
 
     const supabase = createClient(supabaseUrl, supabaseKey)
 
