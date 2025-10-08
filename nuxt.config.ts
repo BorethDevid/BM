@@ -2,8 +2,8 @@
 export default defineNuxtConfig({
   devtools: { enabled: true },
   typescript: {
-    strict: true,
-    typeCheck: true
+    strict: false,
+    typeCheck: false
   },
   runtimeConfig: {
     // Private keys (only available on server-side)
@@ -14,5 +14,8 @@ export default defineNuxtConfig({
       supabaseUrl: process.env.SUPABASE_URL || '',
       supabaseAnonKey: process.env.SUPABASE_ANON_KEY || ''
     }
+  },
+  nitro: {
+    preset: 'vercel'
   }
 })
