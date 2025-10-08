@@ -1,7 +1,8 @@
 export default defineEventHandler(async (event) => {
   try {
-    const supabaseUrl = process.env.SUPABASE_URL
-    const supabaseKey = process.env.SUPABASE_ANON_KEY
+    const config = useRuntimeConfig()
+    const supabaseUrl = config.supabaseUrl
+    const supabaseKey = config.supabaseAnonKey
 
     return {
       error: null,
