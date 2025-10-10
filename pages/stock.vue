@@ -7,223 +7,327 @@
     
     <!-- Loading State -->
     <div v-if="loading" class="loading-container">
-      <div class="loading-spinner"></div>
-      <p>Loading products from Supabase...</p>
+      <el-card class="loading-card">
+        <div class="loading-content">
+          <span class="loading-icon" style="font-size: 48px;">⏳</span>
+          <h3>Loading Products</h3>
+          <p>Fetching data from Supabase...</p>
+        </div>
+      </el-card>
     </div>
     
     <!-- Error State -->
     <div v-else-if="error" class="error-container">
-      <div class="error-message">
-        <h3>⚠️ Connection Error</h3>
-        <p>{{ error }}</p>
-        <p><strong>To fix this:</strong></p>
-        <ol>
-          <li>Create a <code>.env</code> file with your Supabase credentials</li>
-          <li>Set up a <code>products</code> table in your Supabase database</li>
-          <li>Make sure your Supabase project is running</li>
-        </ol>
-      </div>
+      <el-alert
+        title="Connection Error"
+        type="error"
+        :description="error"
+        show-icon
+        :closable="false"
+        class="error-alert"
+      >
+        <template #default>
+          <div class="error-content">
+            <h4>To fix this:</h4>
+            <ol>
+              <li>Create a <code>.env</code> file with your Supabase credentials</li>
+              <li>Set up a <code>products</code> table in your Supabase database</li>
+              <li>Make sure your Supabase project is running</li>
+            </ol>
+          </div>
+        </template>
+      </el-alert>
     </div>
     
     <!-- Main Content -->
     <div v-else>
-      <div class="stock-grid">
-        <div class="stock-card">
-          <h3>Total Products</h3>
-          <div class="stock-number">{{ totalProducts }}</div>
-          <p class="stock-description">Items in inventory</p>
-        </div>
+      <el-row :gutter="24" class="stock-grid">
+        <el-col :xs="24" :sm="8" :md="8" :lg="8" :xl="8">
+          <el-card class="stock-card total-card" shadow="hover">
+            <div class="stock-content">
+              <div class="stock-icon">
+                <span style="font-size: 32px;">📦</span>
+              </div>
+              <div class="stock-info">
+                <h3>Total Products</h3>
+                <div class="stock-number">{{ totalProducts }}</div>
+                <p class="stock-description">Items in inventory</p>
+              </div>
+            </div>
+          </el-card>
+        </el-col>
         
-        <div class="stock-card">
-          <h3>Low Stock</h3>
-          <div class="stock-number low-stock">{{ lowStockItems }}</div>
-          <p class="stock-description">Items need restocking</p>
-        </div>
+        <el-col :xs="24" :sm="8" :md="8" :lg="8" :xl="8">
+          <el-card class="stock-card low-stock-card" shadow="hover">
+            <div class="stock-content">
+              <div class="stock-icon">
+                <span style="font-size: 32px;">⚠️</span>
+              </div>
+              <div class="stock-info">
+                <h3>Low Stock</h3>
+                <div class="stock-number low-stock">{{ lowStockItems }}</div>
+                <p class="stock-description">Items need restocking</p>
+              </div>
+            </div>
+          </el-card>
+        </el-col>
         
-        <div class="stock-card">
-          <h3>Out of Stock</h3>
-          <div class="stock-number out-of-stock">{{ outOfStockItems }}</div>
-          <p class="stock-description">Items unavailable</p>
-        </div>
-      </div>
+        <el-col :xs="24" :sm="8" :md="8" :lg="8" :xl="8">
+          <el-card class="stock-card out-of-stock-card" shadow="hover">
+            <div class="stock-content">
+              <div class="stock-icon">
+                <span style="font-size: 32px;">❌</span>
+              </div>
+              <div class="stock-info">
+                <h3>Out of Stock</h3>
+                <div class="stock-number out-of-stock">{{ outOfStockItems }}</div>
+                <p class="stock-description">Items unavailable</p>
+              </div>
+            </div>
+          </el-card>
+        </el-col>
+      </el-row>
       
       <!-- Products Table -->
       <div v-if="products.length > 0" class="products-section">
-        <h2>Products Inventory</h2>
-        <div class="products-table-container">
-          <table class="products-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Category</th>
-                <th>Price</th>
-                <th>Stock</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="product in products" :key="product.id">
-                <td>{{ product.name }}</td>
-                <td>{{ product.category }}</td>
-                <td>${{ product.price.toFixed(2) }}</td>
-                <td>{{ product.stock_quantity }}</td>
-                <td>
-                  <span 
-                    class="status-badge"
-                    :class="{
-                      'out-of-stock': product.stock_quantity === 0,
-                      'low-stock': product.stock_quantity > 0 && product.stock_quantity < 10,
-                      'in-stock': product.stock_quantity >= 10
-                    }"
+        <el-card class="products-card" shadow="hover">
+          <template #header>
+            <div class="products-header">
+              <h2>
+                <span>📋</span>
+                Products Inventory
+              </h2>
+              <el-button type="primary" @click="addNewProduct">
+                <span>➕</span>
+                Add Product
+              </el-button>
+            </div>
+          </template>
+          
+          <el-table 
+            :data="products" 
+            stripe 
+            style="width: 100%"
+            class="products-table"
+            :row-class-name="getRowClassName"
+          >
+            <el-table-column prop="name" label="Product Name" min-width="150">
+              <template #default="{ row }">
+                <div class="product-name">
+                  <span>📦</span>
+                  <span>{{ row.name }}</span>
+                </div>
+              </template>
+            </el-table-column>
+            
+            <el-table-column prop="category" label="Category" min-width="120">
+              <template #default="{ row }">
+                <el-tag type="info" size="small">{{ row.category }}</el-tag>
+              </template>
+            </el-table-column>
+            
+            <el-table-column prop="price" label="Price" min-width="100" align="right">
+              <template #default="{ row }">
+                <span class="price">${{ row.price.toFixed(2) }}</span>
+              </template>
+            </el-table-column>
+            
+            <el-table-column prop="stock_quantity" label="Stock" min-width="100" align="center">
+              <template #default="{ row }">
+                <el-tag 
+                  :type="getStockTagType(row.stock_quantity)"
+                  size="small"
+                >
+                  {{ row.stock_quantity }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            
+            <el-table-column label="Status" min-width="120" align="center">
+              <template #default="{ row }">
+                <el-tag 
+                  :type="getStatusTagType(row.stock_quantity)"
+                  size="small"
+                >
+                  {{ getStockStatus(row.stock_quantity) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            
+            <el-table-column label="Actions" min-width="120" align="center">
+              <template #default="{ row }">
+                <el-button-group>
+                  <el-button 
+                    type="primary" 
+                    size="small" 
+                    @click="openEditModal(row)"
+                    title="Edit product"
                   >
-                    {{ 
-                      product.stock_quantity === 0 ? 'Out of Stock' :
-                      product.stock_quantity < 10 ? 'Low Stock' : 'In Stock'
-                    }}
-                  </span>
-                </td>
-                <td>
-                  <div class="action-buttons">
-                    <button 
-                      class="btn btn-sm btn-edit" 
-                      @click="openEditModal(product)"
-                      title="Edit product"
-                    >
-                      ✏️
-                    </button>
-                    <button 
-                      class="btn btn-sm btn-delete" 
-                      @click="confirmDelete(product)"
-                      title="Delete product"
-                    >
-                      🗑️
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+                    <span>✏️</span>
+                  </el-button>
+                  <el-button 
+                    type="danger" 
+                    size="small" 
+                    @click="confirmDelete(row)"
+                    title="Delete product"
+                  >
+                    <span>🗑️</span>
+                  </el-button>
+                </el-button-group>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-card>
       </div>
       
       <!-- Empty State -->
       <div v-else class="empty-state">
-        <h3>No Products Found</h3>
-        <p>Your inventory is empty. Add some products to get started!</p>
+        <el-card class="empty-card" shadow="hover">
+          <div class="empty-content">
+            <span class="empty-icon" style="font-size: 64px;">📦</span>
+            <h3>No Products Found</h3>
+            <p>Your inventory is empty. Add some products to get started!</p>
+            <el-button type="primary" size="large" @click="addNewProduct">
+              <span>➕</span>
+              Add Your First Product
+            </el-button>
+          </div>
+        </el-card>
       </div>
       
-      <div class="stock-actions">
-        <button class="btn btn-primary" @click="addNewProduct">
+      <div class="stock-actions" v-if="products.length > 0">
+        <el-button type="primary" @click="addNewProduct">
+          <span>➕</span>
           Add New Product
-        </button>
-        <button class="btn btn-secondary" @click="fetchProducts">
+        </el-button>
+        <el-button type="default" @click="fetchProducts">
+          <span>🔄</span>
           Refresh Data
-        </button>
+        </el-button>
       </div>
     </div>
 
     <!-- Add/Edit Product Modal -->
-    <div v-if="showAddModal || showEditModal" class="modal-overlay" @click="closeModal">
-      <div class="modal-content" @click.stop>
-        <div class="modal-header">
-          <h2>{{ showEditModal ? 'Edit Product' : 'Add New Product' }}</h2>
-          <button class="modal-close" @click="closeModal">&times;</button>
-        </div>
+    <el-dialog
+      :model-value="showAddModal || showEditModal"
+      :title="showEditModal ? 'Edit Product' : 'Add New Product'"
+      width="500px"
+      :close-on-click-modal="false"
+      @close="closeModal"
+    >
+      <el-form 
+        :model="newProduct" 
+        :rules="formRules" 
+        ref="productForm"
+        label-width="120px"
+        @submit.prevent="saveNewProduct"
+      >
+        <el-form-item label="Product Name" prop="name">
+          <el-input
+            v-model="newProduct.name"
+            placeholder="Enter product name"
+            clearable
+          />
+        </el-form-item>
         
-        <form @submit.prevent="saveNewProduct" class="product-form">
-          <div class="form-group">
-            <label for="productName">Product Name *</label>
-            <input
-              id="productName"
-              v-model="newProduct.name"
-              type="text"
-              placeholder="Enter product name"
-              required
+        <el-form-item label="Price" prop="price">
+          <el-input-number
+            v-model="newProduct.price"
+            :min="0"
+            :precision="2"
+            :step="0.01"
+            placeholder="0.00"
+            style="width: 100%"
+          />
+        </el-form-item>
+        
+        <el-form-item label="Stock Quantity" prop="stock_quantity">
+          <el-input-number
+            v-model="newProduct.stock_quantity"
+            :min="0"
+            placeholder="0"
+            style="width: 100%"
+          />
+        </el-form-item>
+        
+        <el-form-item label="Category" prop="category">
+          <el-select
+            v-model="newProduct.category"
+            placeholder="Select a category"
+            style="width: 100%"
+            clearable
+          >
+            <el-option
+              v-for="category in categories"
+              :key="category.id"
+              :label="category.name"
+              :value="category.name"
             />
-          </div>
-          
-          <div class="form-group">
-            <label for="productPrice">Price *</label>
-            <input
-              id="productPrice"
-              v-model.number="newProduct.price"
-              type="number"
-              step="0.01"
-              min="0"
-              placeholder="0.00"
-              required
-            />
-          </div>
-          
-          <div class="form-group">
-            <label for="productStock">Stock Quantity</label>
-            <input
-              id="productStock"
-              v-model.number="newProduct.stock_quantity"
-              type="number"
-              min="0"
-              placeholder="0"
-            />
-          </div>
-          
-          <div class="form-group">
-            <label for="productCategory">Category *</label>
-            <select
-              id="productCategory"
-              v-model="newProduct.category"
-              required
+          </el-select>
+          <div v-if="categories.length === 0" class="form-help">
+            <el-alert
+              title="No categories found"
+              type="warning"
+              :closable="false"
+              show-icon
             >
-              <option value="">Select a category</option>
-              <option v-for="category in categories" :key="category.id" :value="category.name">
-                {{ category.name }}
-              </option>
-            </select>
-            <p v-if="categories.length === 0" class="form-help">
-              No categories found. <NuxtLink to="/categories" class="link">Create categories first</NuxtLink>
-            </p>
+              <template #default>
+                <NuxtLink to="/categories" class="link">Create categories first</NuxtLink>
+              </template>
+            </el-alert>
           </div>
-          
-          <div class="form-actions">
-            <button type="button" class="btn btn-secondary" @click="closeModal">
-              Cancel
-            </button>
-            <button type="submit" class="btn btn-primary" :disabled="saving">
-              {{ saving ? 'Saving...' : (showEditModal ? 'Update Product' : 'Add Product') }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        </el-form-item>
+      </el-form>
+      
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="closeModal">Cancel</el-button>
+          <el-button 
+            type="primary" 
+            @click="saveNewProduct"
+            :loading="saving"
+          >
+            {{ showEditModal ? 'Update Product' : 'Add Product' }}
+          </el-button>
+        </div>
+      </template>
+    </el-dialog>
 
     <!-- Delete Confirmation Modal -->
-    <div v-if="showDeleteModal" class="modal-overlay" @click="closeDeleteModal">
-      <div class="modal-content delete-modal" @click.stop>
-        <div class="modal-header">
-          <h2>Delete Product</h2>
-          <button class="modal-close" @click="closeDeleteModal">&times;</button>
-        </div>
-        
-        <div class="delete-content">
-          <p>Are you sure you want to delete the product <strong>"{{ productToDelete?.name }}"</strong>?</p>
-          <p class="warning">This action cannot be undone.</p>
-          
-          <div class="form-actions">
-            <button type="button" class="btn btn-secondary" @click="closeDeleteModal">
-              Cancel
-            </button>
-            <button 
-              type="button" 
-              class="btn btn-danger" 
-              @click="deleteProduct"
-              :disabled="deleting"
-            >
-              {{ deleting ? 'Deleting...' : 'Delete Product' }}
-            </button>
-          </div>
-        </div>
+    <el-dialog
+      :model-value="showDeleteModal"
+      title="Delete Product"
+      width="400px"
+      :close-on-click-modal="false"
+      @close="closeDeleteModal"
+    >
+      <div class="delete-content">
+        <el-alert
+          title="Warning"
+          type="warning"
+          :closable="false"
+          show-icon
+        >
+          <template #default>
+            <p>Are you sure you want to delete the product <strong>"{{ productToDelete?.name }}"</strong>?</p>
+            <p class="warning-text">This action cannot be undone.</p>
+          </template>
+        </el-alert>
       </div>
-    </div>
+      
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="closeDeleteModal">Cancel</el-button>
+          <el-button 
+            type="danger" 
+            @click="deleteProduct"
+            :loading="deleting"
+          >
+            Delete Product
+          </el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -477,6 +581,46 @@ const viewInventory = (): void => {
   // View inventory logic here
 }
 
+// Form validation rules
+const formRules = {
+  name: [
+    { required: true, message: 'Please enter product name', trigger: 'blur' },
+    { min: 2, max: 100, message: 'Length should be 2 to 100', trigger: 'blur' }
+  ],
+  price: [
+    { required: true, message: 'Please enter product price', trigger: 'blur' },
+    { type: 'number' as const, min: 0, message: 'Price must be greater than 0', trigger: 'blur' }
+  ],
+  category: [
+    { required: true, message: 'Please select a category', trigger: 'change' }
+  ]
+}
+
+// Helper functions for table display
+const getRowClassName = ({ row }: { row: Product }) => {
+  if (row.stock_quantity === 0) return 'out-of-stock-row'
+  if (row.stock_quantity < 10) return 'low-stock-row'
+  return 'in-stock-row'
+}
+
+const getStockTagType = (stock: number) => {
+  if (stock === 0) return 'danger'
+  if (stock < 10) return 'warning'
+  return 'success'
+}
+
+const getStatusTagType = (stock: number) => {
+  if (stock === 0) return 'danger'
+  if (stock < 10) return 'warning'
+  return 'success'
+}
+
+const getStockStatus = (stock: number) => {
+  if (stock === 0) return 'Out of Stock'
+  if (stock < 10) return 'Low Stock'
+  return 'In Stock'
+}
+
 // Fetch data on component mount
 onMounted(async () => {
   await Promise.all([
@@ -488,9 +632,11 @@ onMounted(async () => {
 
 <style scoped>
 .page-container {
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
   padding: 2rem;
+  background: #f8fafc;
+  min-height: 100vh;
 }
 
 .page-header {
@@ -499,130 +645,376 @@ onMounted(async () => {
 }
 
 .page-header h1 {
-  color: #2c3e50;
-  font-size: 2.5rem;
+  color: #1e293b;
+  font-size: 3.2rem;
   margin-bottom: 0.5rem;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .page-header p {
-  color: #7f8c8d;
-  font-size: 1.1rem;
+  color: #64748b;
+  font-size: 1.3rem;
+  font-weight: 500;
+  letter-spacing: 0.025em;
 }
 
 .stock-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 2rem;
-  margin-bottom: 3rem;
+  margin-bottom: 2rem;
+  display: flex;
+  align-items: stretch;
+}
+
+.stock-grid .el-col {
+  display: flex;
+  flex-direction: column;
 }
 
 .stock-card {
-  background: white;
-  padding: 2rem;
-  border-radius: 12px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  text-align: center;
-  transition: transform 0.3s ease;
+  border-radius: 20px;
+  border: none;
+  overflow: hidden;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Ensure Element Plus card body takes full height */
+:deep(.stock-card .el-card__body) {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
+.stock-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #3b82f6, #10b981);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.stock-card:hover::before {
+  opacity: 1;
 }
 
 .stock-card:hover {
-  transform: translateY(-5px);
+  transform: translateY(-8px) scale(1.02);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
 }
 
-.stock-card h3 {
-  color: #2c3e50;
-  margin-bottom: 1rem;
-  font-size: 1.2rem;
+.stock-content {
+  display: flex;
+  align-items: center;
+  padding: 2.5rem;
+  gap: 2rem;
+  flex: 1;
+  height: 100%;
+}
+
+.stock-icon {
+  width: 90px;
+  height: 90px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.stock-icon::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(45deg, rgba(255, 255, 255, 0.1), transparent);
+  border-radius: 20px;
+}
+
+.total-card .stock-icon {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: white;
+  box-shadow: 0 8px 16px rgba(59, 130, 246, 0.3);
+}
+
+.low-stock-card .stock-icon {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: white;
+  box-shadow: 0 8px 16px rgba(245, 158, 11, 0.3);
+}
+
+.out-of-stock-card .stock-icon {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: white;
+  box-shadow: 0 8px 16px rgba(239, 68, 68, 0.3);
+}
+
+.stock-info {
+  flex: 1;
+  text-align: left;
+}
+
+.stock-info h3 {
+  color: #1e293b;
+  margin: 0 0 0.5rem 0;
+  font-size: 1.3rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
 }
 
 .stock-number {
   font-size: 3rem;
-  font-weight: bold;
-  margin-bottom: 0.5rem;
-  color: #27ae60;
+  font-weight: 800;
+  margin-bottom: 0.25rem;
+  color: #10b981;
+  letter-spacing: -0.05em;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .stock-number.low-stock {
-  color: #f39c12;
+  color: #f59e0b;
 }
 
 .stock-number.out-of-stock {
-  color: #e74c3c;
+  color: #ef4444;
 }
 
 .stock-description {
   color: #7f8c8d;
   font-size: 0.9rem;
+  margin: 0;
 }
 
 .stock-actions {
   display: flex;
-  gap: 1rem;
+  gap: 1.5rem;
   justify-content: center;
   flex-wrap: wrap;
+  margin-top: 3rem;
 }
 
-.btn {
-  padding: 0.75rem 2rem;
-  border: none;
-  border-radius: 8px;
-  font-size: 1rem;
+.stock-actions .el-button {
+  height: 56px;
+  padding: 0 2rem;
   font-weight: 600;
-  cursor: pointer;
+  font-size: 1rem;
+  letter-spacing: 0.025em;
+  border-radius: 16px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.stock-actions .el-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.stock-actions .el-button:hover::before {
+  left: 100%;
+}
+
+.stock-actions .el-button:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
+}
+
+/* Table Action Buttons */
+:deep(.el-button-group .el-button) {
+  border-radius: 12px !important;
+  margin: 0 2px !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+:deep(.el-button-group .el-button::before) {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.3s;
+}
+
+:deep(.el-button-group .el-button:hover::before) {
+  left: 100%;
+}
+
+:deep(.el-button-group .el-button:hover) {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15) !important;
+}
+
+:deep(.el-button-group .el-button--primary) {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8) !important;
+  border: none !important;
+  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3) !important;
+}
+
+:deep(.el-button-group .el-button--danger) {
+  background: linear-gradient(135deg, #ef4444, #dc2626) !important;
+  border: none !important;
+  box-shadow: 0 4px 8px rgba(239, 68, 68, 0.3) !important;
+}
+
+/* Products Section */
+.products-section {
+  margin-top: 2rem;
+}
+
+.products-card {
+  border-radius: 20px;
+  border: none;
+  overflow: hidden;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
   transition: all 0.3s ease;
-  text-decoration: none;
-  display: inline-block;
 }
 
-.btn-primary {
-  background-color: #3498db;
-  color: white;
+.products-card:hover {
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
 }
 
-.btn-primary:hover {
-  background-color: #2980b9;
-  transform: translateY(-2px);
+.products-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem 0;
 }
 
-.btn-secondary {
-  background-color: #95a5a6;
-  color: white;
+.products-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0;
+  color: #1e293b;
+  font-size: 1.8rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
 }
 
-.btn-secondary:hover {
-  background-color: #7f8c8d;
-  transform: translateY(-2px);
+/* Table Styling */
+:deep(.el-table) {
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
-.btn-info {
-  background-color: #17a2b8;
-  color: white;
+:deep(.el-table__header) {
+  background: linear-gradient(135deg, #f8fafc, #e2e8f0);
 }
 
-.btn-info:hover {
-  background-color: #138496;
-  transform: translateY(-2px);
+:deep(.el-table__header th) {
+  background: transparent !important;
+  color: #1e293b !important;
+  font-weight: 700 !important;
+  font-size: 0.95rem !important;
+  letter-spacing: 0.025em !important;
+  border-bottom: 2px solid #e2e8f0 !important;
+}
+
+:deep(.el-table__body tr) {
+  transition: all 0.3s ease;
+}
+
+:deep(.el-table__body tr:hover) {
+  background: #f8fafc !important;
+  transform: scale(1.01);
+}
+
+:deep(.el-table__body td) {
+  border-bottom: 1px solid #f1f5f9 !important;
+  padding: 1rem 0.75rem !important;
+}
+
+.product-name {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.price {
+  font-weight: 700;
+  color: #10b981;
+  font-size: 1.1rem;
+  letter-spacing: 0.025em;
+}
+
+/* Table row styling */
+:deep(.out-of-stock-row) {
+  background-color: #fef2f2;
+}
+
+:deep(.low-stock-row) {
+  background-color: #fffbeb;
+}
+
+:deep(.in-stock-row) {
+  background-color: #f0fdf4;
 }
 
 /* Loading State */
 .loading-container {
-  text-align: center;
+  display: flex;
+  justify-content: center;
   padding: 4rem 2rem;
 }
 
-.loading-spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid #f3f3f3;
-  border-top: 4px solid #3498db;
-  border-radius: 50%;
+.loading-card {
+  border-radius: 16px;
+  border: none;
+  max-width: 400px;
+  width: 100%;
+}
+
+.loading-content {
+  text-align: center;
+  padding: 2rem;
+}
+
+.loading-icon {
+  color: #3498db;
   animation: spin 1s linear infinite;
-  margin: 0 auto 1rem;
+  margin-bottom: 1rem;
 }
 
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
+}
+
+.loading-content h3 {
+  color: #2c3e50;
+  margin: 0 0 0.5rem 0;
+  font-size: 1.5rem;
+}
+
+.loading-content p {
+  color: #7f8c8d;
+  margin: 0;
 }
 
 /* Error State */
@@ -632,218 +1024,69 @@ onMounted(async () => {
   padding: 2rem;
 }
 
-.error-message {
-  background: #f8d7da;
-  border: 1px solid #f5c6cb;
-  border-radius: 8px;
-  padding: 2rem;
+.error-alert {
   max-width: 600px;
-  text-align: left;
+  width: 100%;
+  border-radius: 12px;
 }
 
-.error-message h3 {
+.error-content h4 {
   color: #721c24;
-  margin-bottom: 1rem;
+  margin: 1rem 0 0.5rem 0;
 }
 
-.error-message p {
+.error-content ol {
   color: #721c24;
-  margin-bottom: 1rem;
-}
-
-.error-message ol {
-  color: #721c24;
-  margin: 1rem 0;
+  margin: 0.5rem 0;
   padding-left: 1.5rem;
 }
 
-.error-message code {
+.error-content code {
   background: #e9ecef;
   padding: 0.2rem 0.4rem;
   border-radius: 4px;
   font-family: 'Courier New', monospace;
 }
 
-/* Products Section */
-.products-section {
-  margin: 3rem 0;
-}
-
-.products-section h2 {
-  color: #2c3e50;
-  margin-bottom: 1.5rem;
-  text-align: center;
-}
-
-.products-table-container {
-  overflow-x: auto;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  margin-bottom: 2rem;
-}
-
-.products-table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 600px;
-}
-
-.products-table th {
-  background: #f8f9fa;
-  color: #2c3e50;
-  font-weight: 600;
-  padding: 1rem;
-  text-align: left;
-  border-bottom: 2px solid #dee2e6;
-}
-
-.products-table td {
-  padding: 1rem;
-  border-bottom: 1px solid #dee2e6;
-  color: #495057;
-}
-
-.products-table tr:hover {
-  background: #f8f9fa;
-}
-
-/* Status Badges */
-.status-badge {
-  padding: 0.25rem 0.75rem;
-  border-radius: 20px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  text-transform: uppercase;
-}
-
-.status-badge.in-stock {
-  background: #d4edda;
-  color: #155724;
-}
-
-.status-badge.low-stock {
-  background: #fff3cd;
-  color: #856404;
-}
-
-.status-badge.out-of-stock {
-  background: #f8d7da;
-  color: #721c24;
-}
-
 /* Empty State */
 .empty-state {
-  text-align: center;
-  padding: 4rem 2rem;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  margin: 2rem 0;
-}
-
-.empty-state h3 {
-  color: #2c3e50;
-  margin-bottom: 1rem;
-}
-
-.empty-state p {
-  color: #7f8c8d;
-  margin-bottom: 2rem;
-}
-
-/* Modal Styles */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.5);
   display: flex;
   justify-content: center;
-  align-items: center;
-  z-index: 1000;
+  padding: 4rem 2rem;
 }
 
-.modal-content {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-  width: 90%;
+.empty-card {
+  border-radius: 16px;
+  border: none;
   max-width: 500px;
-  max-height: 90vh;
-  overflow-y: auto;
+  width: 100%;
 }
 
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1.5rem;
-  border-bottom: 1px solid #dee2e6;
+.empty-content {
+  text-align: center;
+  padding: 3rem 2rem;
 }
 
-.modal-header h2 {
-  margin: 0;
+.empty-icon {
+  color: #bdc3c7;
+  margin-bottom: 1.5rem;
+}
+
+.empty-content h3 {
   color: #2c3e50;
+  margin: 0 0 1rem 0;
   font-size: 1.5rem;
 }
 
-.modal-close {
-  background: none;
-  border: none;
-  font-size: 2rem;
-  cursor: pointer;
+.empty-content p {
   color: #7f8c8d;
-  padding: 0;
-  width: 30px;
-  height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  margin: 0 0 2rem 0;
+  line-height: 1.6;
 }
 
-.modal-close:hover {
-  color: #e74c3c;
-}
-
-.product-form {
-  padding: 1.5rem;
-}
-
-.form-group {
-  margin-bottom: 1.5rem;
-}
-
-.form-group label {
-  display: block;
-  margin-bottom: 0.5rem;
-  font-weight: 600;
-  color: #2c3e50;
-}
-
-.form-group input,
-.form-group select {
-  width: 100%;
-  padding: 0.75rem;
-  border: 2px solid #dee2e6;
-  border-radius: 8px;
-  font-size: 1rem;
-  transition: border-color 0.3s ease;
-}
-
-.form-group input:focus,
-.form-group select:focus {
-  outline: none;
-  border-color: #3498db;
-  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
-}
-
+/* Form Help */
 .form-help {
-  margin-top: 0.5rem;
-  font-size: 0.9rem;
-  color: #7f8c8d;
+  margin-top: 1rem;
 }
 
 .form-help .link {
@@ -856,71 +1099,52 @@ onMounted(async () => {
   text-decoration: underline;
 }
 
-/* Action Buttons */
-.action-buttons {
-  display: flex;
-  gap: 0.5rem;
+/* Dialog customization */
+:deep(.el-dialog) {
+  border-radius: 16px;
 }
 
-.btn-sm {
-  padding: 0.5rem;
-  font-size: 0.9rem;
-  min-width: auto;
-}
-
-.btn-edit {
-  background-color: #ffc107;
-  color: #212529;
-}
-
-.btn-edit:hover {
-  background-color: #e0a800;
-}
-
-.btn-delete {
-  background-color: #dc3545;
+:deep(.el-dialog__header) {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
-}
-
-.btn-delete:hover {
-  background-color: #c82333;
-}
-
-.btn-danger {
-  background-color: #dc3545;
-  color: white;
-}
-
-.btn-danger:hover {
-  background-color: #c82333;
-}
-
-/* Delete Modal */
-.delete-modal {
-  max-width: 400px;
-}
-
-.delete-content {
+  border-radius: 16px 16px 0 0;
   padding: 1.5rem;
 }
 
-.delete-content p {
-  margin-bottom: 1rem;
-  color: #495057;
-}
-
-.warning {
-  color: #dc3545;
+:deep(.el-dialog__title) {
+  color: white;
   font-weight: 600;
 }
 
-.form-actions {
+:deep(.el-dialog__headerbtn .el-dialog__close) {
+  color: white;
+  font-size: 1.5rem;
+}
+
+:deep(.el-dialog__body) {
+  padding: 2rem;
+}
+
+:deep(.el-dialog__footer) {
+  padding: 1rem 2rem 2rem;
+  border-top: 1px solid #f0f0f0;
+}
+
+.dialog-footer {
   display: flex;
-  gap: 1rem;
   justify-content: flex-end;
-  margin-top: 2rem;
-  padding-top: 1rem;
-  border-top: 1px solid #dee2e6;
+  gap: 1rem;
+}
+
+/* Delete content */
+.delete-content {
+  padding: 1rem 0;
+}
+
+.warning-text {
+  color: #e6a23c;
+  font-weight: 600;
+  margin: 0.5rem 0 0 0;
 }
 
 /* Responsive design */
@@ -933,9 +1157,28 @@ onMounted(async () => {
     font-size: 2rem;
   }
   
-  .stock-grid {
-    grid-template-columns: 1fr;
+  .stock-content {
+    flex-direction: column;
+    text-align: center;
     gap: 1rem;
+  }
+  
+  .stock-info {
+    text-align: center;
+  }
+  
+  .stock-number {
+    font-size: 2rem;
+  }
+  
+  .products-header {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: stretch;
+  }
+  
+  .products-header h2 {
+    font-size: 1.3rem;
   }
   
   .stock-actions {
@@ -943,22 +1186,53 @@ onMounted(async () => {
     align-items: center;
   }
   
-  .btn {
+  .stock-actions .el-button {
     width: 100%;
     max-width: 300px;
   }
   
-  .modal-content {
-    width: 95%;
+  :deep(.el-dialog) {
+    width: 95% !important;
     margin: 1rem;
   }
   
-  .form-actions {
+  :deep(.el-dialog__body) {
+    padding: 1rem;
+  }
+  
+  :deep(.el-dialog__footer) {
+    padding: 1rem;
+  }
+  
+  .dialog-footer {
     flex-direction: column;
   }
   
-  .form-actions .btn {
+  .dialog-footer .el-button {
     width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .page-header h1 {
+    font-size: 1.8rem;
+  }
+  
+  .stock-icon {
+    width: 50px;
+    height: 50px;
+  }
+  
+  .stock-number {
+    font-size: 1.8rem;
+  }
+  
+  .products-header h2 {
+    font-size: 1.2rem;
+  }
+  
+  .empty-content {
+    padding: 2rem 1rem;
   }
 }
 </style>

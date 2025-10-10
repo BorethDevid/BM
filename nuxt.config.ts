@@ -5,6 +5,9 @@ export default defineNuxtConfig({
     strict: false,
     typeCheck: false
   },
+  modules: [
+    '@element-plus/nuxt'
+  ],
   runtimeConfig: {
     // Private keys (only available on server-side)
     supabaseUrl: process.env.SUPABASE_URL || '',
