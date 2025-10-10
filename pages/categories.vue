@@ -30,18 +30,29 @@
     
     <!-- Main Content -->
     <div v-else>
-      <!-- Total Categories Display -->
+      <!-- Total Categories Display (Collapsible) -->
       <div class="total-categories-card">
-        <div class="total-categories-content">
-          <div class="total-categories-icon">
-            <span>📁</span>
+        <div class="total-header" @click="toggleTotals" role="button" tabindex="0" @keydown.enter.prevent="toggleTotals" @keydown.space.prevent="toggleTotals">
+          <div class="total-title">
+            <span class="total-title-icon">📁</span>
+            <span>Total Categories</span>
           </div>
-          <div class="total-categories-info">
-            <h3>Total Categories</h3>
-            <div class="total-categories-number">{{ categories.length }}</div>
-            <p class="total-categories-description">Categories in your system</p>
-          </div>
+          <button type="button" class="toggle-btn" @click.stop="toggleTotals" :aria-expanded="showTotals.toString()" aria-controls="total-categories-body">
+            <span class="toggle-text">{{ showTotals ? 'Hide' : 'Show' }}</span>
+            <span class="chevron" :class="{ rotated: showTotals }">⌄</span>
+          </button>
         </div>
+        <transition name="collapse">
+          <div v-show="showTotals" id="total-categories-body" class="total-categories-content">
+            <div class="total-categories-icon">
+              <span>📁</span>
+            </div>
+            <div class="total-categories-info">
+              <div class="total-categories-number">{{ categories.length }}</div>
+              <p class="total-categories-description">Categories in your system</p>
+            </div>
+          </div>
+        </transition>
       </div>
 
       <!-- Action Bar -->
@@ -215,6 +226,7 @@ const loading = ref(true)
 const error = ref<string | null>(null)
 const saving = ref(false)
 const deleting = ref(false)
+const showTotals = ref(true)
 
 // Modal states
 const showModal = ref(false)
@@ -405,6 +417,11 @@ const formatDate = (dateString: string) => {
 onMounted(() => {
   fetchCategories()
 })
+
+// Toggle totals section
+const toggleTotals = () => {
+  showTotals.value = !showTotals.value
+}
 </script>
 
 <style scoped>
@@ -432,7 +449,7 @@ onMounted(() => {
 /* Total Categories Card */
 .total-categories-card {
   background: white;
-  padding: 2rem;
+  padding: 0;
   border-radius: 12px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   margin-bottom: 2rem;
@@ -443,10 +460,65 @@ onMounted(() => {
   transform: translateY(-5px);
 }
 
+.total-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  cursor: pointer;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.total-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: #2c3e50;
+  font-weight: 700;
+}
+
+.total-title-icon {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: #fff;
+  border-radius: 10px;
+  box-shadow: 0 6px 12px rgba(59, 130, 246, 0.25);
+}
+
+.toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #334155;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.toggle-btn:hover {
+  background: #e2e8f0;
+}
+
+.chevron {
+  transition: transform 0.2s ease;
+}
+
+.chevron.rotated {
+  transform: rotate(180deg);
+}
+
 .total-categories-content {
   display: flex;
   align-items: center;
   gap: 2rem;
+  padding: 1.5rem 1.25rem 1.75rem 1.25rem;
 }
 
 .total-categories-icon {
@@ -479,6 +551,24 @@ onMounted(() => {
   margin-bottom: 0.5rem;
   color: #3b82f6;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+.collapse-enter-active,
+.collapse-leave-active {
+  transition: all 0.25s ease;
+}
+
+.collapse-enter-from,
+.collapse-leave-to {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+.collapse-enter-to,
+.collapse-leave-from {
+  max-height: 160px;
+  opacity: 1;
 }
 
 .total-categories-description {
