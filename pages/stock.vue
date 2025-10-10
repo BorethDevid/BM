@@ -816,6 +816,18 @@ onMounted(async () => {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.stock-actions .el-button span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  line-height: 1;
 }
 
 .stock-actions .el-button::before {
@@ -838,6 +850,31 @@ onMounted(async () => {
   box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
 }
 
+/* Enhanced button styling for better visual appeal */
+.stock-actions .el-button--primary {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8) !important;
+  border: none !important;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3) !important;
+}
+
+.stock-actions .el-button--primary:hover {
+  background: linear-gradient(135deg, #2563eb, #1e40af) !important;
+  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4) !important;
+}
+
+.stock-actions .el-button--default {
+  background: linear-gradient(135deg, #f8fafc, #e2e8f0) !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #475569 !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05) !important;
+}
+
+.stock-actions .el-button--default:hover {
+  background: linear-gradient(135deg, #f1f5f9, #cbd5e1) !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+}
+
 /* Table Action Buttons */
 :deep(.el-button-group .el-button) {
   border-radius: 12px !important;
@@ -845,6 +882,20 @@ onMounted(async () => {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
   position: relative !important;
   overflow: hidden !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.5rem !important;
+  min-width: 40px !important;
+  height: 36px !important;
+}
+
+:deep(.el-button-group .el-button span) {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 1rem !important;
+  line-height: 1 !important;
 }
 
 :deep(.el-button-group .el-button::before) {
@@ -912,6 +963,63 @@ onMounted(async () => {
   font-size: 1.8rem;
   font-weight: 700;
   letter-spacing: -0.025em;
+}
+
+/* Header Add Product Button */
+.products-header .el-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  height: 48px;
+  padding: 0 1.5rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+  letter-spacing: 0.025em;
+  border-radius: 12px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.products-header .el-button span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.products-header .el-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.products-header .el-button:hover::before {
+  left: 100%;
+}
+
+.products-header .el-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+}
+
+/* Header button enhanced styling */
+.products-header .el-button--primary {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8) !important;
+  border: none !important;
+  box-shadow: 0 3px 10px rgba(59, 130, 246, 0.3) !important;
+}
+
+.products-header .el-button--primary:hover {
+  background: linear-gradient(135deg, #2563eb, #1e40af) !important;
+  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4) !important;
 }
 
 /* Table Styling */
