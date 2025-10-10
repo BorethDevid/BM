@@ -1,7 +1,7 @@
 <template>
-  <div>
+  <div class="app-layout">
     <NavigationBar v-if="showNavigation" />
-    <main class="main-content" :class="{ 'no-nav': !showNavigation }">
+    <main class="main-content" :class="{ 'with-sidebar': showNavigation, 'no-nav': !showNavigation }">
       <NuxtPage />
     </main>
   </div>
@@ -39,22 +39,41 @@ body {
   background-color: #f8f9fa;
 }
 
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+}
+
 .main-content {
-  min-height: calc(100vh - 60px);
-  padding: 2rem 1rem;
-  max-width: 1200px;
-  margin: 0 auto;
+  flex: 1;
+  min-height: 100vh;
+  padding: 2rem;
+  background-color: #f8f9fa;
+  transition: margin-left 0.3s ease;
+}
+
+.main-content.with-sidebar {
+  margin-left: 280px;
 }
 
 .main-content.no-nav {
-  min-height: 100vh;
+  margin-left: 0;
   padding: 0;
 }
 
 /* Responsive design */
 @media (max-width: 768px) {
+  .app-layout {
+    flex-direction: column;
+  }
+  
   .main-content {
+    margin-left: 0 !important;
     padding: 1rem;
+  }
+  
+  .main-content.with-sidebar {
+    margin-left: 0;
   }
   
   .main-content.no-nav {
