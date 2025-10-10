@@ -48,9 +48,8 @@ const { currentUser } = useAuth()
 
 <style scoped>
 .page-container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 2rem;
+  width: 100%;
+  padding: 0;
 }
 
 .page-header {
