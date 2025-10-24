@@ -33,16 +33,32 @@
           <span class="item-icon">📁</span>
           <span class="item-text">Categories</span>
         </NuxtLink>
-        <NuxtLink 
-          to="/orders" 
+        <NuxtLink
+          to="/orders"
           class="sidebar-item"
           :class="{ active: $route.path === '/orders' }"
         >
           <span class="item-icon">🛒</span>
           <span class="item-text">Orders</span>
         </NuxtLink>
-        <NuxtLink 
-          to="/data" 
+        <NuxtLink
+          to="/expenses"
+          class="sidebar-item"
+          :class="{ active: $route.path === '/expenses' }"
+        >
+          <span class="item-icon">💰</span>
+          <span class="item-text">Expenses</span>
+        </NuxtLink>
+        <NuxtLink
+          to="/income"
+          class="sidebar-item"
+          :class="{ active: $route.path === '/income' }"
+        >
+          <span class="item-icon">📈</span>
+          <span class="item-text">Income</span>
+        </NuxtLink>
+        <NuxtLink
+          to="/data"
           class="sidebar-item"
           :class="{ active: $route.path === '/data' }"
         >
