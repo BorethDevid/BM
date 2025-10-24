@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container">
+  <div class="page-container" :class="{ 'expanded': isTableExpanded }">
     <div class="page-header">
       <h1>Order Management</h1>
       <p>Manage customer orders and track order status</p>
@@ -44,6 +44,9 @@
           </button>
         </div>
         <div class="action-right">
+          <button class="btn btn-outline" @click="toggleTableWidth">
+            <span>{{ isTableExpanded ? '⬅️' : '➡️' }}</span> {{ isTableExpanded ? 'Collapse' : 'Expand' }}
+          </button>
           <button class="btn btn-outline" @click="toggleColumnMenu">
             <span>👁️</span> Columns
           </button>
@@ -211,8 +214,8 @@
           <table class="orders-table">
             <thead>
               <tr>
-                <th 
-                  v-for="columnKey in columnOrder" 
+                <th
+                  v-for="columnKey in columnOrder"
                   :key="columnKey"
                   v-show="getColumnVisibility(columnKey)"
                   :draggable="true"
@@ -223,7 +226,8 @@
                   @dragend="handleDragEnd"
                   :class="{
                     'dragging': draggedColumn === columnKey,
-                    'drag-over': dragOverColumn === columnKey
+                    'drag-over': dragOverColumn === columnKey,
+                    'sticky-column': columnKey === 'actions'
                   }"
                   class="draggable-header"
                 >
@@ -236,10 +240,13 @@
             </thead>
             <tbody>
               <tr v-for="order in filteredOrders" :key="order.id">
-                <td 
-                  v-for="columnKey in columnOrder" 
+                <td
+                  v-for="columnKey in columnOrder"
                   :key="columnKey"
                   v-show="getColumnVisibility(columnKey)"
+                  :class="{
+                    'sticky-column': columnKey === 'actions'
+                  }"
                 >
                   <!-- Order ID -->
                   <span v-if="columnKey === 'orderId'">#{{ order.id }}</span>
@@ -252,10 +259,26 @@
                   </div>
                   
                   <!-- Product -->
-                  <span v-else-if="columnKey === 'product'">{{ order.product_name }}</span>
+                  <div v-else-if="columnKey === 'product'" class="product-info">
+                    <div v-if="order.items && order.items.length > 0" class="multi-products">
+                      <div v-for="(item, index) in order.items" :key="index" class="product-item-display">
+                        <span class="product-name">{{ item.product_name }}</span>
+                        <span class="product-quantity">({{ item.quantity }})</span>
+                      </div>
+                    </div>
+                    <span v-else-if="order.product_name" class="single-product">
+                      {{ order.product_name }}
+                    </span>
+                    <span v-else class="no-data">-</span>
+                  </div>
                   
                   <!-- Quantity -->
-                  <span v-else-if="columnKey === 'quantity'">{{ order.quantity }}</span>
+                  <span v-else-if="columnKey === 'quantity'">
+                    <span v-if="order.items && order.items.length > 0">
+                      {{ getTotalQuantityForOrder(order) }}
+                    </span>
+                    <span v-else>{{ order.quantity || 0 }}</span>
+                  </span>
                   
                   <!-- Total -->
                   <span v-else-if="columnKey === 'total'">${{ order.total_amount.toFixed(2) }}</span>
@@ -363,52 +386,133 @@
             </div>
           </div>
           
-          <div class="form-row">
-            <div class="form-group">
-              <label for="productSelect">Product *</label>
-              <select
-                id="productSelect"
-                v-model="orderForm.product_id"
-                @change="onProductSelect"
-                required
-              >
-                <option value="">Select a product</option>
-                <option v-for="product in products" :key="product.id" :value="product.id">
-                  {{ product.name }} - ${{ product.price.toFixed(2) }} (Stock: {{ product.stock_quantity }})
-                </option>
-              </select>
-              <p v-if="products.length === 0" class="form-help">
-                No products found. <NuxtLink to="/stock" class="link">Add products first</NuxtLink>
-              </p>
+          <!-- Products Section -->
+          <div class="form-section">
+            <div class="form-section-header">
+              <h3>Products *</h3>
+              <button type="button" class="btn btn-sm btn-primary" @click="addProductItem">
+                + Add Product
+              </button>
             </div>
             
-            <div class="form-group">
-              <label for="quantity">Quantity *</label>
-              <input
-                id="quantity"
-                v-model.number="orderForm.quantity"
-                type="number"
-                min="1"
-                placeholder="1"
-                required
-              />
+            <div v-if="orderForm.items.length === 0" class="empty-products">
+              <p>No products added yet. Click "Add Product" to get started.</p>
+            </div>
+            
+            <div v-else class="product-items">
+              <div 
+                v-for="(item, index) in orderForm.items" 
+                :key="index" 
+                class="product-item"
+              >
+                <div class="product-item-header">
+                  <h4>Product {{ index + 1 }}</h4>
+                  <button 
+                    type="button" 
+                    class="btn btn-sm btn-danger" 
+                    @click="removeProductItem(index)"
+                    :disabled="orderForm.items.length === 1"
+                  >
+                    Remove
+                  </button>
+                </div>
+                
+                <div class="form-row">
+                  <div class="form-group">
+                    <label :for="`productSelect_${index}`">Product *</label>
+                    <div class="product-select-container">
+                      <select
+                        :id="`productSelect_${index}`"
+                        v-model="item.product_id"
+                        @change="onProductSelect(index)"
+                        required
+                        class="product-select"
+                      >
+                        <option value="">Select a product</option>
+                        <option 
+                          v-for="product in products" 
+                          :key="product.id" 
+                          :value="product.id"
+                          :disabled="isProductAlreadySelected(product.id, index)"
+                        >
+                          {{ product.name }} - ${{ product.price.toFixed(2) }} (Stock: {{ product.stock_quantity }})
+                        </option>
+                      </select>
+                      <button 
+                        type="button" 
+                        class="btn btn-sm btn-outline refresh-product-btn"
+                        @click="onProductSelect(index)"
+                        title="Refresh product details"
+                      >
+                        🔄
+                      </button>
+                    </div>
+                    <div v-if="item.product_id && !item.product_name" class="form-help error">
+                      ⚠️ Product name not set. Click the refresh button or reselect the product.
+                    </div>
+                  </div>
+                  
+                  <div class="form-group">
+                    <label :for="`quantity_${index}`">Quantity *</label>
+                    <input
+                      :id="`quantity_${index}`"
+                      v-model.number="item.quantity"
+                      type="number"
+                      min="1"
+                      placeholder="1"
+                      @input="updateItemTotal(index)"
+                      required
+                    />
+                  </div>
+                </div>
+                
+                <div class="form-row">
+                  <div class="form-group">
+                    <label :for="`unitPrice_${index}`">Unit Price *</label>
+                    <input
+                      :id="`unitPrice_${index}`"
+                      v-model.number="item.unit_price"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="0.00"
+                      @input="updateItemTotal(index)"
+                      required
+                    />
+                  </div>
+                  
+                  <div class="form-group">
+                    <label :for="`totalPrice_${index}`">Total Price</label>
+                    <input
+                      :id="`totalPrice_${index}`"
+                      v-model.number="item.total_price"
+                      type="number"
+                      step="0.01"
+                      readonly
+                      class="readonly-input"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div v-if="orderForm.items.length > 0" class="order-summary">
+              <div class="summary-row">
+                <span class="summary-label">Total Items:</span>
+                <span class="summary-value">{{ orderForm.items.length }}</span>
+              </div>
+              <div class="summary-row">
+                <span class="summary-label">Total Quantity:</span>
+                <span class="summary-value">{{ getTotalQuantity() }}</span>
+              </div>
+              <div class="summary-row total-row">
+                <span class="summary-label">Order Total:</span>
+                <span class="summary-value">${{ getOrderTotal().toFixed(2) }}</span>
+              </div>
             </div>
           </div>
           
           <div class="form-row">
-            <div class="form-group">
-              <label for="unitPrice">Unit Price *</label>
-              <input
-                id="unitPrice"
-                v-model.number="orderForm.unit_price"
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="0.00"
-                required
-              />
-            </div>
-            
             <div class="form-group">
               <label for="orderStatus">Status *</label>
               <select
@@ -423,6 +527,10 @@
                 <option value="Delivered">Delivered</option>
                 <option value="Cancelled">Cancelled</option>
               </select>
+            </div>
+            
+            <div class="form-group">
+              <!-- Empty div for layout balance -->
             </div>
           </div>
           
@@ -538,9 +646,9 @@ interface Order {
   id: number
   customer_name: string
   customer_email: string
-  product_name: string
-  quantity: number
-  unit_price: number
+  product_name?: string // Keep for backward compatibility
+  quantity?: number // Keep for backward compatibility
+  unit_price?: number // Keep for backward compatibility
   total_amount: number
   status: string
   channel?: string
@@ -548,6 +656,17 @@ interface Order {
   order_date?: string
   notes?: string
   created_at: string
+  items?: OrderItem[] // New: array of order items
+}
+
+interface OrderItem {
+  id: number
+  order_id: number
+  product_id: number
+  product_name: string
+  quantity: number
+  unit_price: number
+  total_price: number
 }
 
 // Hardcoded data interfaces
@@ -579,6 +698,9 @@ const showDeleteModal = ref(false)
 const isEditing = ref(false)
 const orderToEdit = ref<Order | null>(null)
 const orderToDelete = ref<Order | null>(null)
+
+// Table width state
+const isTableExpanded = ref(false)
 
 // Column visibility states
 const showColumnMenu = ref(false)
@@ -661,15 +783,19 @@ const availableColumns = [
 const orderForm = reactive({
   customer_name: '',
   customer_email: '',
-  product_id: '',
-  product_name: '',
-  quantity: 1,
-  unit_price: 0,
   status: '',
   channel: '',
   location: '',
   order_date: '',
-  notes: ''
+  notes: '',
+  items: [] as Array<{
+    id?: number
+    product_id: string
+    product_name: string
+    quantity: number
+    unit_price: number
+    total_price: number
+  }>
 })
 
 // Hardcoded data for filter dropdowns
@@ -725,13 +851,64 @@ const fetchProducts = async () => {
   }
 }
 
-// Fetch orders from Supabase
+// Fetch orders from Supabase with order items
 const fetchOrders = async () => {
   try {
     loading.value = true
     error.value = null
     
     const { select } = useSupabaseDB()
+    
+    // First, try to fetch orders with order items using the view
+    try {
+      const { data: orderDetails, error: viewError } = await select('order_details')
+      
+      if (!viewError && orderDetails) {
+        // Group order details by order_id
+        const ordersMap = new Map()
+        
+        orderDetails.forEach((detail: any) => {
+          if (!ordersMap.has(detail.order_id)) {
+            ordersMap.set(detail.order_id, {
+              id: detail.order_id,
+              customer_name: detail.customer_name,
+              customer_email: detail.customer_email,
+              status: detail.status,
+              channel: detail.channel,
+              location: detail.location,
+              order_date: detail.order_date,
+              notes: detail.notes,
+              created_at: detail.created_at,
+              total_amount: 0,
+              items: []
+            })
+          }
+          
+          const order = ordersMap.get(detail.order_id)
+          
+          // Add item if it exists
+          if (detail.item_id) {
+            order.items.push({
+              id: detail.item_id,
+              order_id: detail.order_id,
+              product_id: detail.product_id,
+              product_name: detail.product_name,
+              quantity: detail.quantity,
+              unit_price: detail.unit_price,
+              total_price: detail.total_price
+            })
+            order.total_amount += detail.total_price
+          }
+        })
+        
+        orders.value = Array.from(ordersMap.values())
+        return
+      }
+    } catch (viewErr) {
+      console.log('Order details view not available, falling back to basic orders query')
+    }
+    
+    // Fallback: fetch basic orders (for backward compatibility)
     const { data, error: fetchError } = await select('orders')
     
     if (fetchError) {
@@ -772,32 +949,112 @@ const createOrdersTable = async () => {
   }
 }
 
-// Handle product selection
-const onProductSelect = () => {
-  const selectedProduct = products.value.find((p: {id: number, name: string, price: number, stock_quantity: number}) => p.id.toString() === orderForm.product_id)
+// Handle product selection for multi-product orders
+const onProductSelect = (index: number) => {
+  const item = orderForm.items[index]
+  if (!item) return
+  
+  console.log('Product selection for item:', index, 'product_id:', item.product_id) // Debug log
+  console.log('Available products:', products.value) // Debug log
+  
+  // Try different comparison methods to find the product
+  let selectedProduct = products.value.find((p: {id: number, name: string, price: number, stock_quantity: number}) => 
+    p.id.toString() === item.product_id.toString()
+  )
+  
+  // If not found, try with number comparison
+  if (!selectedProduct) {
+    selectedProduct = products.value.find((p: {id: number, name: string, price: number, stock_quantity: number}) => 
+      p.id === parseInt(item.product_id)
+    )
+  }
+  
+  // If still not found, try with string comparison (convert id to string)
+  if (!selectedProduct) {
+    selectedProduct = products.value.find((p: {id: number, name: string, price: number, stock_quantity: number}) => 
+      p.id.toString() === item.product_id.toString()
+    )
+  }
+  
+  console.log('Found selected product:', selectedProduct) // Debug log
+  
   if (selectedProduct) {
-    orderForm.product_name = selectedProduct.name
-    orderForm.unit_price = selectedProduct.price
+    item.product_name = selectedProduct.name
+    item.unit_price = selectedProduct.price
+    updateItemTotal(index)
+    console.log('Updated item:', item) // Debug log
   } else {
     // Reset if no product selected
-    orderForm.product_name = ''
-    orderForm.unit_price = 0
+    item.product_name = ''
+    item.unit_price = 0
+    item.total_price = 0
+    console.log('No product found, reset item') // Debug log
   }
 }
 
-// Watch for product_id changes to auto-update product_name
-watch(() => orderForm.product_id, (newProductId: string) => {
-  if (newProductId) {
-    const selectedProduct = products.value.find((p: {id: number, name: string, price: number, stock_quantity: number}) => p.id.toString() === newProductId)
-    if (selectedProduct) {
-      orderForm.product_name = selectedProduct.name
-      orderForm.unit_price = selectedProduct.price
-    }
-  } else {
-    orderForm.product_name = ''
-    orderForm.unit_price = 0
+// Add a new product item to the order
+const addProductItem = () => {
+  orderForm.items.push({
+    product_id: '',
+    product_name: '',
+    quantity: 1,
+    unit_price: 0,
+    total_price: 0
+  })
+}
+
+// Remove a product item from the order
+const removeProductItem = (index: number) => {
+  if (orderForm.items.length > 1) {
+    orderForm.items.splice(index, 1)
   }
-})
+}
+
+// Check if a product is already selected in another item
+const isProductAlreadySelected = (productId: number, currentIndex: number) => {
+  return orderForm.items.some((item: any, index: number) => 
+    index !== currentIndex && item.product_id === productId.toString()
+  )
+}
+
+// Update the total price for a specific item
+const updateItemTotal = (index: number) => {
+  const item = orderForm.items[index]
+  if (item) {
+    item.total_price = item.quantity * item.unit_price
+  }
+}
+
+// Get total quantity across all items
+const getTotalQuantity = () => {
+  return orderForm.items.reduce((total: number, item: any) => total + item.quantity, 0)
+}
+
+// Get total order amount
+const getOrderTotal = () => {
+  return orderForm.items.reduce((total: number, item: any) => total + item.total_price, 0)
+}
+
+// Get total quantity for an order (for display in table)
+const getTotalQuantityForOrder = (order: Order) => {
+  if (order.items && order.items.length > 0) {
+    return order.items.reduce((total, item) => total + item.quantity, 0)
+  }
+  return order.quantity || 0
+}
+
+// Watch for changes in product_id to auto-update product_name
+watch(() => orderForm.items, (newItems: any) => {
+  if (newItems) {
+    newItems.forEach((item: any, index: number) => {
+      if (item.product_id && !item.product_name) {
+        // Auto-update product name if product_id is set but product_name is missing
+        onProductSelect(index)
+      }
+    })
+  }
+}, { deep: true })
+
 
 // Open add modal
 const openAddModal = () => {
@@ -805,17 +1062,25 @@ const openAddModal = () => {
   Object.assign(orderForm, {
     customer_name: '',
     customer_email: '',
-    product_id: '',
-    product_name: '',
-    quantity: 1,
-    unit_price: 0,
     status: '',
     channel: '',
     location: '',
     order_date: getCurrentDate(), // Set default to today
-    notes: ''
+    notes: '',
+    items: [{
+      product_id: '',
+      product_name: '',
+      quantity: 1,
+      unit_price: 0,
+      total_price: 0
+    }]
   })
   showModal.value = true
+  
+  // Ensure products are loaded
+  if (products.value.length === 0) {
+    fetchProducts()
+  }
 }
 
 // Open edit modal
@@ -823,20 +1088,49 @@ const openEditModal = (order: Order) => {
   isEditing.value = true
   orderToEdit.value = order // Store the order being edited
   
-  // Find the product ID for the selected product
-  const product = products.value.find((p: {id: number, name: string, price: number, stock_quantity: number}) => p.name === order.product_name)
+  // Handle both new multi-product structure and legacy single-product structure
+  let items = []
+  
+  if (order.items && order.items.length > 0) {
+    // New multi-product structure
+    items = order.items.map(item => ({
+      id: item.id,
+      product_id: item.product_id.toString(),
+      product_name: item.product_name,
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      total_price: item.total_price
+    }))
+  } else if (order.product_name) {
+    // Legacy single-product structure - convert to new format
+    const product = products.value.find((p: {id: number, name: string, price: number, stock_quantity: number}) => p.name === order.product_name)
+    items = [{
+      product_id: product?.id.toString() || '',
+      product_name: order.product_name,
+      quantity: order.quantity || 1,
+      unit_price: order.unit_price || 0,
+      total_price: (order.quantity || 1) * (order.unit_price || 0)
+    }]
+  } else {
+    // Default empty item
+    items = [{
+      product_id: '',
+      product_name: '',
+      quantity: 1,
+      unit_price: 0,
+      total_price: 0
+    }]
+  }
+  
   Object.assign(orderForm, {
     customer_name: order.customer_name,
     customer_email: order.customer_email,
-    product_id: product?.id.toString() || '',
-    product_name: order.product_name,
-    quantity: order.quantity,
-    unit_price: order.unit_price,
     status: order.status,
     channel: order.channel || '',
     location: order.location || '',
     order_date: order.order_date || '',
-    notes: order.notes || ''
+    notes: order.notes || '',
+    items: items
   })
   showModal.value = true
 }
@@ -847,15 +1141,12 @@ const closeModal = () => {
   Object.assign(orderForm, {
     customer_name: '',
     customer_email: '',
-    product_id: '',
-    product_name: '',
-    quantity: 1,
-    unit_price: 0,
     status: '',
     channel: '',
     location: '',
     order_date: '',
-    notes: ''
+    notes: '',
+    items: []
   })
   isEditing.value = false
   orderToEdit.value = null // Clear the order being edited
@@ -1018,21 +1309,51 @@ const getCurrentDate = () => {
   return today.toISOString().split('T')[0]
 }
 
-// Save order (add or update)
+// Save order (add or update) - Multi-product version
 const saveOrder = async () => {
   try {
     saving.value = true
     
     // Validate form
-    if (!orderForm.customer_name || !orderForm.customer_email || !orderForm.product_id || !orderForm.status) {
+    if (!orderForm.customer_name || !orderForm.customer_email || !orderForm.status) {
       alert('Please fill in all required fields')
       return
     }
     
-    // Additional check for product_id
-    if (!orderForm.product_id || orderForm.product_id === '') {
-      alert('Please select a product from the dropdown')
+    // Validate that we have at least one product
+    if (!orderForm.items || orderForm.items.length === 0) {
+      alert('Please add at least one product to the order')
       return
+    }
+    
+    // Validate each product item
+    for (let i = 0; i < orderForm.items.length; i++) {
+      const item = orderForm.items[i]
+      console.log(`Validating Product ${i + 1}:`, item) // Debug log
+      
+      // Check if product is selected
+      if (!item.product_id || item.product_id === '') {
+        alert(`Please select a product for Product ${i + 1}`)
+        return
+      }
+      
+      // Check if product name is set (this should be auto-set when product is selected)
+      if (!item.product_name || item.product_name === '') {
+        alert(`Product name is missing for Product ${i + 1}. Please select the product again.`)
+        return
+      }
+      
+      // Check quantity
+      if (!item.quantity || item.quantity <= 0) {
+        alert(`Please enter a valid quantity for Product ${i + 1}`)
+        return
+      }
+      
+      // Check unit price
+      if (item.unit_price === undefined || item.unit_price === null || item.unit_price < 0) {
+        alert(`Please enter a valid unit price for Product ${i + 1}`)
+        return
+      }
     }
     
     // Check if products are loaded
@@ -1041,51 +1362,13 @@ const saveOrder = async () => {
       await fetchProducts()
     }
     
-    // Ensure product_name is set from the selected product
-    console.log('Looking for product with ID:', orderForm.product_id)
-    console.log('Available products:', products.value)
-    
-    // Try different comparison methods
-    let selectedProduct = products.value.find((p: {id: number, name: string, price: number, stock_quantity: number}) => p.id.toString() === orderForm.product_id)
-    
-    // If not found, try with number comparison
-    if (!selectedProduct) {
-      selectedProduct = products.value.find((p: {id: number, name: string, price: number, stock_quantity: number}) => p.id === parseInt(orderForm.product_id))
-    }
-    
-    // If still not found, try with string comparison (convert id to string)
-    if (!selectedProduct) {
-      selectedProduct = products.value.find((p: {id: number, name: string, price: number, stock_quantity: number}) => p.id.toString() === orderForm.product_id)
-    }
-    
-    console.log('Found selected product:', selectedProduct)
-    
-    if (selectedProduct) {
-      orderForm.product_name = selectedProduct.name
-      orderForm.unit_price = selectedProduct.price
-      console.log('Set product_name to:', orderForm.product_name)
-    } else {
-      console.log('No product found for ID:', orderForm.product_id)
-      alert('Please select a valid product from the dropdown')
-      return
-    }
-    
-    // Double check that product_name is not empty
-    if (!orderForm.product_name || orderForm.product_name.trim() === '') {
-      alert('Product name is required')
-      return
-    }
-    
     // Calculate total amount
-    const totalAmount = orderForm.quantity * orderForm.unit_price
+    const totalAmount = getOrderTotal()
     
-    // Prepare order data with fallback for missing columns
+    // Prepare order data
     const orderData: any = {
       customer_name: orderForm.customer_name.trim(),
       customer_email: orderForm.customer_email.trim(),
-      product_name: orderForm.product_name.trim(),
-      quantity: orderForm.quantity,
-      unit_price: orderForm.unit_price,
       total_amount: totalAmount,
       status: orderForm.status,
       notes: orderForm.notes.trim() || null
@@ -1104,19 +1387,8 @@ const saveOrder = async () => {
       orderData.order_date = orderForm.order_date.trim()
     }
     
-    // Validate numeric fields
-    if (isNaN(orderForm.quantity) || orderForm.quantity <= 0) {
-      throw new Error('Quantity must be a positive number')
-    }
-    
-    if (isNaN(orderForm.unit_price) || orderForm.unit_price < 0) {
-      throw new Error('Unit price must be a non-negative number')
-    }
-    
-    // Debug: Log the order data to check if product_name is set
     console.log('Saving order with data:', orderData)
-    console.log('Selected product:', selectedProduct)
-    console.log('Form product_name:', orderForm.product_name)
+    console.log('Order items:', orderForm.items)
     
     if (isEditing.value) {
       // Update existing order
@@ -1125,21 +1397,60 @@ const saveOrder = async () => {
       }
       
       console.log('Updating order with ID:', orderToEdit.value.id)
-      console.log('Update data:', orderData)
       
-      const { update } = useSupabaseDB()
-      const { error } = await update('orders', orderData).eq('id', orderToEdit.value.id)
+      const { update, delete: deleteRecord } = useSupabaseDB()
       
-      if (error) {
-        console.error('Update error:', error)
-        throw error
-      }
+      // Update the main order record
+      const { error: orderError } = await update('orders', orderData).eq('id', orderToEdit.value.id)
+      if (orderError) throw orderError
+      
+      // Delete existing order items
+      const { error: deleteError } = await deleteRecord('order_items').eq('order_id', orderToEdit.value.id)
+      if (deleteError) throw deleteError
+      
+      // Insert new order items
+      const orderItemsData = orderForm.items.map((item: any) => ({
+        order_id: orderToEdit.value.id,
+        product_id: parseInt(item.product_id),
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        total_price: item.total_price
+      }))
+      
+      const { insert } = useSupabaseDB()
+      const { error: itemsError } = await insert('order_items', orderItemsData)
+      if (itemsError) throw itemsError
+      
     } else {
       // Add new order
       const { insert } = useSupabaseDB()
-      const { error } = await insert('orders', [orderData])
-      
-      if (error) throw error
+
+      // Insert the main order record with .select() to get the returned data
+      const { data: orderResult, error: orderError } = await insert('orders', [orderData]).select()
+      if (orderError) throw orderError
+
+      // Get the new order ID
+      const newOrderId = orderResult?.[0]?.id
+      if (!newOrderId) {
+        console.error('Order result:', orderResult)
+        throw new Error('Failed to get new order ID')
+      }
+
+      console.log('New order created with ID:', newOrderId)
+
+      // Insert order items
+      const orderItemsData = orderForm.items.map((item: any) => ({
+        order_id: newOrderId,
+        product_id: parseInt(item.product_id),
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        total_price: item.total_price
+      }))
+
+      console.log('Inserting order items:', orderItemsData)
+
+      const { error: itemsError } = await insert('order_items', orderItemsData)
+      if (itemsError) throw itemsError
     }
     
     closeModal()
@@ -1156,7 +1467,7 @@ const saveOrder = async () => {
       console.error('Detailed error:', errorMsg)
       
       if (errorMsg.includes('column') && errorMsg.includes('does not exist')) {
-        errorMessage = 'Database schema error: Missing column. Please run the database update queries.'
+        errorMessage = 'Database schema error: Missing column. Please run the multi-product migration first.'
       } else if (errorMsg.includes('permission')) {
         errorMessage = 'Permission denied. Please check your database permissions.'
       } else if (errorMsg.includes('connection')) {
@@ -1242,6 +1553,29 @@ const testDatabaseConnection = async () => {
 // Filter functions
 const toggleFilters = () => {
   showFilters.value = !showFilters.value
+}
+
+const toggleTableWidth = () => {
+  isTableExpanded.value = !isTableExpanded.value
+  saveTableWidthPreference()
+}
+
+// Save table width preference to localStorage
+const saveTableWidthPreference = () => {
+  localStorage.setItem('orderTableExpanded', JSON.stringify(isTableExpanded.value))
+}
+
+// Load table width preference from localStorage
+const loadTableWidthPreference = () => {
+  const saved = localStorage.getItem('orderTableExpanded')
+  if (saved !== null) {
+    try {
+      isTableExpanded.value = JSON.parse(saved)
+    } catch (e) {
+      console.warn('Failed to load table width preference:', e)
+      isTableExpanded.value = false
+    }
+  }
 }
 
 const clearFilters = () => {
@@ -1347,18 +1681,45 @@ const filteredOrders = computed(() => {
   return filtered
 })
 
+// Debug function to check form state
+const debugFormState = () => {
+  console.log('=== FORM DEBUG INFO ===')
+  console.log('Order Form:', orderForm)
+  console.log('Products:', products.value)
+  console.log('Form Items:', orderForm.items)
+  
+  if (orderForm.items && orderForm.items.length > 0) {
+    orderForm.items.forEach((item, index) => {
+      console.log(`Item ${index + 1}:`, {
+        product_id: item.product_id,
+        product_name: item.product_name,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        total_price: item.total_price
+      })
+    })
+  }
+  console.log('========================')
+}
+
+// Make debug function available globally for testing
+if (typeof window !== 'undefined') {
+  (window as any).debugFormState = debugFormState
+}
+
 // Fetch data on component mount
 onMounted(async () => {
   loadColumnPreferences() // Load saved column preferences
   loadColumnOrder() // Load saved column order
-  
+  loadTableWidthPreference() // Load saved table width preference
+
   // Test database connection first
   const connectionOk = await testDatabaseConnection()
   if (!connectionOk) {
     error.value = 'Database connection failed. Please check your Supabase configuration.'
     return
   }
-  
+
   await Promise.all([
     fetchOrders(),
     fetchProducts()
@@ -1371,6 +1732,12 @@ onMounted(async () => {
   max-width: 1200px;
   margin: 0 auto;
   padding: 2rem;
+  transition: max-width 0.3s ease;
+}
+
+.page-container.expanded {
+  max-width: 100%;
+  padding: 2rem 1rem;
 }
 
 .page-header {
@@ -1781,6 +2148,30 @@ onMounted(async () => {
 .orders-table th:nth-child(9), .orders-table td:nth-child(9) { width: 120px; } /* Order Date */
 .orders-table th:nth-child(10), .orders-table td:nth-child(10) { width: 100px; } /* Actions */
 
+/* Sticky column styles - works regardless of column position */
+.orders-table .sticky-column {
+  position: sticky;
+  right: 0;
+  z-index: 10;
+}
+
+/* Sticky header background */
+.orders-table thead th.sticky-column {
+  background: #f8f9fa;
+  box-shadow: -2px 0 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Sticky body cell background */
+.orders-table tbody td.sticky-column {
+  background: white;
+  box-shadow: -2px 0 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Maintain hover effect for sticky column */
+.orders-table tbody tr:hover td.sticky-column {
+  background: #f8f9fa;
+}
+
 .orders-table td {
   padding: 1rem;
   border-bottom: 1px solid #dee2e6;
@@ -2106,6 +2497,177 @@ onMounted(async () => {
   transform: translateY(-2px);
 }
 
+/* Multi-Product Form Styles */
+.form-section {
+  margin-bottom: 2rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 1.5rem;
+  background: #f9fafb;
+}
+
+.form-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.form-section-header h3 {
+  margin: 0;
+  color: #374151;
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.empty-products {
+  text-align: center;
+  padding: 2rem;
+  color: #6b7280;
+  background: white;
+  border-radius: 8px;
+  border: 2px dashed #d1d5db;
+}
+
+.product-items {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.product-item {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.product-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.product-item-header h4 {
+  margin: 0;
+  color: #374151;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.order-summary {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.summary-row:last-child {
+  border-bottom: none;
+}
+
+.summary-row.total-row {
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: #1f2937;
+  border-top: 2px solid #e5e7eb;
+  margin-top: 0.5rem;
+  padding-top: 1rem;
+}
+
+.summary-label {
+  color: #6b7280;
+}
+
+.summary-value {
+  color: #1f2937;
+  font-weight: 500;
+}
+
+.readonly-input {
+  background-color: #f9fafb;
+  color: #6b7280;
+  cursor: not-allowed;
+}
+
+/* Product Select Container */
+.product-select-container {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.product-select {
+  flex: 1;
+}
+
+.refresh-product-btn {
+  padding: 0.5rem;
+  min-width: auto;
+  height: 38px; /* Match select height */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.form-help.error {
+  color: #dc3545;
+  font-weight: 500;
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  background: #f8d7da;
+  border: 1px solid #f5c6cb;
+  border-radius: 4px;
+}
+
+/* Product Display in Table */
+.product-info {
+  max-width: 200px;
+}
+
+.multi-products {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.product-item-display {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.product-name {
+  font-weight: 500;
+  color: #374151;
+}
+
+.product-quantity {
+  color: #6b7280;
+  font-size: 0.8rem;
+}
+
+.single-product {
+  color: #374151;
+  font-weight: 500;
+}
+
 /* Responsive design */
 @media (max-width: 768px) {
   .page-container {
@@ -2186,6 +2748,43 @@ onMounted(async () => {
   
   .form-actions .btn {
     width: 100%;
+  }
+  
+  /* Multi-product responsive styles */
+  .form-section-header {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: stretch;
+  }
+  
+  .product-item-header {
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: stretch;
+  }
+  
+  .product-item-header h4 {
+    text-align: center;
+  }
+  
+  .summary-row {
+    flex-direction: column;
+    gap: 0.25rem;
+    text-align: center;
+  }
+  
+  .product-info {
+    max-width: none;
+  }
+  
+  .multi-products {
+    gap: 0.5rem;
+  }
+  
+  .product-item-display {
+    flex-direction: column;
+    gap: 0.25rem;
+    text-align: center;
   }
 }
 </style>

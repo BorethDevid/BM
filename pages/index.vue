@@ -35,7 +35,21 @@ const { currentUser } = useAuth()
         <p>Track and manage customer orders</p>
         <NuxtLink to="/orders" class="card-link">Go to Orders</NuxtLink>
       </div>
-      
+
+      <div class="dashboard-card expense-card">
+        <div class="card-icon">💰</div>
+        <h3>Expenses</h3>
+        <p>Track business expenses and goods purchased for resale</p>
+        <NuxtLink to="/expenses" class="card-link">Go to Expenses</NuxtLink>
+      </div>
+
+      <div class="dashboard-card income-card">
+        <div class="card-icon">📈</div>
+        <h3>Income & Profit</h3>
+        <p>Track revenue, calculate profits, and analyze performance</p>
+        <NuxtLink to="/income" class="card-link">Go to Income</NuxtLink>
+      </div>
+
       <div class="dashboard-card">
         <div class="card-icon">📊</div>
         <h3>Data Management</h3>
@@ -120,6 +134,34 @@ const { currentUser } = useAuth()
 .card-link:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+}
+
+/* Special styling for Expense card */
+.expense-card {
+  border-left: 4px solid #f59e0b;
+}
+
+.expense-card .card-icon {
+  color: #f59e0b;
+  filter: drop-shadow(0 2px 4px rgba(245, 158, 11, 0.3));
+}
+
+.expense-card:hover {
+  border-left-color: #d97706;
+}
+
+/* Special styling for Income card */
+.income-card {
+  border-left: 4px solid #10b981;
+}
+
+.income-card .card-icon {
+  color: #10b981;
+  filter: drop-shadow(0 2px 4px rgba(16, 185, 129, 0.3));
+}
+
+.income-card:hover {
+  border-left-color: #059669;
 }
 
 /* Responsive design */
