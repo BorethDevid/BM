@@ -1354,8 +1354,20 @@ const saveOrder = async () => {
         alert(`Please enter a valid unit price for Product ${i + 1}`)
         return
       }
+
+      // Check stock availability (only for new orders, not when editing)
+      if (!isEditing.value) {
+        const product = products.value.find((p: any) => p.id.toString() === item.product_id.toString())
+        if (product) {
+          const availableStock = product.stock_quantity || 0
+          if (item.quantity > availableStock) {
+            alert(`Insufficient stock for ${item.product_name}. Available: ${availableStock}, Requested: ${item.quantity}`)
+            return
+          }
+        }
+      }
     }
-    
+
     // Check if products are loaded
     if (!products.value || products.value.length === 0) {
       console.log('No products available, fetching products...')
@@ -1404,10 +1416,21 @@ const saveOrder = async () => {
       const { error: orderError } = await update('orders', orderData).eq('id', orderToEdit.value.id)
       if (orderError) throw orderError
       
+      // Get existing order items before deletion to restore stock
+      const { select } = useSupabaseDB()
+      const { data: existingItems, error: selectError } = await select('order_items', '*').eq('order_id', orderToEdit.value.id)
+      if (selectError) throw selectError
+
       // Delete existing order items
       const { error: deleteError } = await deleteRecord('order_items').eq('order_id', orderToEdit.value.id)
       if (deleteError) throw deleteError
-      
+
+      // Restore stock for the old items
+      if (existingItems && existingItems.length > 0) {
+        console.log('Restoring stock for old order items...')
+        await restoreStock(existingItems)
+      }
+
       // Insert new order items
       const orderItemsData = orderForm.items.map((item: any) => ({
         order_id: orderToEdit.value.id,
@@ -1416,10 +1439,14 @@ const saveOrder = async () => {
         unit_price: item.unit_price,
         total_price: item.total_price
       }))
-      
+
       const { insert } = useSupabaseDB()
       const { error: itemsError } = await insert('order_items', orderItemsData)
       if (itemsError) throw itemsError
+
+      // Deduct stock for the new items
+      console.log('Deducting stock for updated order items...')
+      await deductStock(orderItemsData)
       
     } else {
       // Add new order
@@ -1451,8 +1478,12 @@ const saveOrder = async () => {
 
       const { error: itemsError } = await insert('order_items', orderItemsData)
       if (itemsError) throw itemsError
+
+      // Deduct stock quantities for the ordered products
+      console.log('Deducting stock for ordered products...')
+      await deductStock(orderItemsData)
     }
-    
+
     closeModal()
     await fetchOrders()
     
@@ -1483,18 +1514,120 @@ const saveOrder = async () => {
   }
 }
 
+// Deduct stock quantities when order is created
+const deductStock = async (orderItems: any[]) => {
+  try {
+    const { update } = useSupabaseDB()
+
+    for (const item of orderItems) {
+      // Get current product stock
+      const { select } = useSupabaseDB()
+      const { data: productData, error: selectError } = await select('products', 'id, stock_quantity')
+        .eq('id', item.product_id)
+        .single()
+
+      if (selectError) {
+        console.error(`Error fetching product ${item.product_id}:`, selectError)
+        throw selectError
+      }
+
+      if (!productData) {
+        throw new Error(`Product with ID ${item.product_id} not found`)
+      }
+
+      // Calculate new stock quantity
+      const currentStock = productData.stock_quantity || 0
+      const newStock = currentStock - item.quantity
+
+      // Check if we have enough stock
+      if (newStock < 0) {
+        throw new Error(`Insufficient stock for product ID ${item.product_id}. Available: ${currentStock}, Requested: ${item.quantity}`)
+      }
+
+      // Update the product stock
+      const { error: updateError } = await update('products', { stock_quantity: newStock })
+        .eq('id', item.product_id)
+
+      if (updateError) {
+        console.error(`Error updating stock for product ${item.product_id}:`, updateError)
+        throw updateError
+      }
+
+      console.log(`Stock updated for product ${item.product_id}: ${currentStock} -> ${newStock}`)
+    }
+  } catch (error) {
+    console.error('Error deducting stock:', error)
+    throw error
+  }
+}
+
+// Restore stock quantities when order is updated/deleted
+const restoreStock = async (orderItems: any[]) => {
+  try {
+    const { update } = useSupabaseDB()
+
+    for (const item of orderItems) {
+      // Get current product stock
+      const { select } = useSupabaseDB()
+      const { data: productData, error: selectError } = await select('products', 'id, stock_quantity')
+        .eq('id', item.product_id)
+        .single()
+
+      if (selectError) {
+        console.error(`Error fetching product ${item.product_id}:`, selectError)
+        continue // Continue with other items even if one fails
+      }
+
+      if (!productData) {
+        console.error(`Product with ID ${item.product_id} not found`)
+        continue
+      }
+
+      // Calculate new stock quantity by adding back the ordered quantity
+      const currentStock = productData.stock_quantity || 0
+      const newStock = currentStock + item.quantity
+
+      // Update the product stock
+      const { error: updateError } = await update('products', { stock_quantity: newStock })
+        .eq('id', item.product_id)
+
+      if (updateError) {
+        console.error(`Error restoring stock for product ${item.product_id}:`, updateError)
+        continue
+      }
+
+      console.log(`Stock restored for product ${item.product_id}: ${currentStock} -> ${newStock}`)
+    }
+  } catch (error) {
+    console.error('Error restoring stock:', error)
+    // Don't throw here, as we want to continue with the operation
+  }
+}
+
 // Delete order
 const deleteOrder = async () => {
   try {
     deleting.value = true
-    
+
     if (!orderToDelete.value) return
-    
+
+    // Get existing order items before deletion to restore stock
+    const { select } = useSupabaseDB()
+    const { data: existingItems, error: selectError } = await select('order_items', '*').eq('order_id', orderToDelete.value.id)
+    if (selectError) throw selectError
+
+    // Delete the order (this will cascade delete order_items due to foreign key constraint)
     const { delete: deleteRecord } = useSupabaseDB()
     const { error } = await deleteRecord('orders').eq('id', orderToDelete.value.id)
-    
+
     if (error) throw error
-    
+
+    // Restore stock for the deleted order items
+    if (existingItems && existingItems.length > 0) {
+      console.log('Restoring stock for deleted order items...')
+      await restoreStock(existingItems)
+    }
+
     closeDeleteModal()
     await fetchOrders()
     
