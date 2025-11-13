@@ -49,7 +49,75 @@
       
       <!-- Products Table -->
       <div v-if="products.length > 0" class="products-section">
-        <h2>Products Inventory</h2>
+        <div class="products-header">
+          <h2>Products Inventory</h2>
+          <div class="category-filter">
+            <label>Filter by Category:</label>
+            <div class="multiselect-wrapper">
+              <div class="multiselect-container" @click="toggleDropdown" ref="multiselectRef">
+                <div class="multiselect-input">
+                  <div class="selected-tags">
+                    <span v-if="selectedCategories.length === 0" class="placeholder">
+                      All Categories
+                    </span>
+                    <span
+                      v-for="category in selectedCategories"
+                      :key="category"
+                      class="tag"
+                    >
+                      {{ category }}
+                      <button
+                        @click.stop="removeCategory(category)"
+                        class="tag-remove"
+                        aria-label="Remove category"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  </div>
+                  <div class="multiselect-arrow" :class="{ open: isDropdownOpen }">
+                    ▼
+                  </div>
+                </div>
+
+                <div v-if="isDropdownOpen" class="multiselect-dropdown" @click.stop>
+                  <div class="search-box">
+                    <input
+                      v-model="searchQuery"
+                      type="text"
+                      placeholder="Search categories..."
+                      class="search-input"
+                      @click.stop
+                      ref="searchInputRef"
+                    />
+                  </div>
+                  <div class="options-list">
+                    <label
+                      v-for="category in filteredCategories"
+                      :key="category.id"
+                      class="option-item"
+                    >
+                      <input
+                        type="checkbox"
+                        :value="category.name"
+                        :checked="selectedCategories.includes(category.name)"
+                        @change="toggleCategory(category.name)"
+                        class="option-checkbox"
+                      />
+                      <span class="option-label">{{ category.name }}</span>
+                    </label>
+                    <div v-if="filteredCategories.length === 0" class="no-results">
+                      No categories found
+                    </div>
+                  </div>
+                  <div class="dropdown-footer">
+                    <button @click.stop="clearAll" class="btn-clear">Clear All</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
         <div class="products-table-container">
           <table class="products-table">
             <thead>
@@ -63,7 +131,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="product in products" :key="product.id">
+              <tr v-for="product in filteredProducts" :key="product.id">
                 <td>{{ product.name }}</td>
                 <td>{{ product.category }}</td>
                 <td>${{ product.price.toFixed(2) }}</td>
@@ -259,8 +327,24 @@ const stockData = reactive<StockData>({
 const loading = ref(true)
 const error = ref<string | null>(null)
 
-// Computed properties
-const { totalProducts, lowStockItems, outOfStockItems } = toRefs(stockData)
+// Computed properties for filtered statistics
+const totalProducts = computed(() => {
+  return selectedCategories.value.length > 0
+    ? filteredProducts.value.length
+    : stockData.totalProducts
+})
+
+const lowStockItems = computed(() => {
+  return selectedCategories.value.length > 0
+    ? filteredProducts.value.filter((p: Product) => p.stock_quantity > 0 && p.stock_quantity < 10).length
+    : stockData.lowStockItems
+})
+
+const outOfStockItems = computed(() => {
+  return selectedCategories.value.length > 0
+    ? filteredProducts.value.filter((p: Product) => p.stock_quantity === 0).length
+    : stockData.outOfStockItems
+})
 
 
 // Fetch categories from Supabase
@@ -332,6 +416,73 @@ const newProduct = reactive({
 
 // Fetch categories from database
 const categories = ref<Array<{id: number, name: string, description?: string}>>([])
+
+// Multi-select category filter
+const selectedCategories = ref<string[]>([])
+const isDropdownOpen = ref(false)
+const searchQuery = ref('')
+const multiselectRef = ref<HTMLElement | null>(null)
+const searchInputRef = ref<HTMLInputElement | null>(null)
+
+// Computed property for filtered categories based on search
+const filteredCategories = computed(() => {
+  if (!searchQuery.value) {
+    return categories.value
+  }
+  const query = searchQuery.value.toLowerCase()
+  return categories.value.filter(cat =>
+    cat.name.toLowerCase().includes(query)
+  )
+})
+
+// Computed property for filtered products based on selected categories
+const filteredProducts = computed(() => {
+  if (selectedCategories.value.length === 0) {
+    return products.value
+  }
+  return products.value.filter(product =>
+    selectedCategories.value.includes(product.category)
+  )
+})
+
+// Multi-select functions
+const toggleDropdown = () => {
+  isDropdownOpen.value = !isDropdownOpen.value
+  if (isDropdownOpen.value) {
+    nextTick(() => {
+      searchInputRef.value?.focus()
+    })
+  }
+}
+
+const toggleCategory = (categoryName: string) => {
+  const index = selectedCategories.value.indexOf(categoryName)
+  if (index > -1) {
+    selectedCategories.value.splice(index, 1)
+  } else {
+    selectedCategories.value.push(categoryName)
+  }
+}
+
+const removeCategory = (categoryName: string) => {
+  const index = selectedCategories.value.indexOf(categoryName)
+  if (index > -1) {
+    selectedCategories.value.splice(index, 1)
+  }
+}
+
+const clearAll = () => {
+  selectedCategories.value = []
+  searchQuery.value = ''
+}
+
+// Close dropdown when clicking outside
+const handleClickOutside = (event: MouseEvent) => {
+  if (multiselectRef.value && !multiselectRef.value.contains(event.target as Node)) {
+    isDropdownOpen.value = false
+    searchQuery.value = ''
+  }
+}
 
 // Add new product function
 const addNewProduct = (): void => {
@@ -483,6 +634,14 @@ onMounted(async () => {
     fetchProducts(),
     fetchCategories()
   ])
+
+  // Add click outside listener for multiselect
+  document.addEventListener('click', handleClickOutside)
+})
+
+// Cleanup on unmount
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside)
 })
 </script>
 
@@ -668,10 +827,258 @@ onMounted(async () => {
   margin: 3rem 0;
 }
 
+.products-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
 .products-section h2 {
   color: #2c3e50;
-  margin-bottom: 1.5rem;
+  margin: 0;
+}
+
+.category-filter {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.category-filter label {
+  color: #2c3e50;
+  font-weight: 600;
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+
+/* Multi-select Container */
+.multiselect-wrapper {
+  position: relative;
+  min-width: 300px;
+  max-width: 500px;
+}
+
+.multiselect-container {
+  position: relative;
+  cursor: pointer;
+}
+
+.multiselect-input {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  border: 2px solid #dee2e6;
+  border-radius: 10px;
+  background: white;
+  min-height: 44px;
+  transition: all 0.3s ease;
+  gap: 0.5rem;
+}
+
+.multiselect-input:hover {
+  border-color: #3498db;
+  box-shadow: 0 2px 8px rgba(52, 152, 219, 0.15);
+}
+
+.selected-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  flex: 1;
+  align-items: center;
+}
+
+.placeholder {
+  color: #7f8c8d;
+  font-size: 0.95rem;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.6rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  animation: tagAppear 0.2s ease;
+}
+
+@keyframes tagAppear {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.tag-remove {
+  background: rgba(255, 255, 255, 0.3);
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  line-height: 1;
+  transition: all 0.2s ease;
+}
+
+.tag-remove:hover {
+  background: rgba(255, 255, 255, 0.5);
+  transform: rotate(90deg);
+}
+
+.multiselect-arrow {
+  color: #7f8c8d;
+  font-size: 0.7rem;
+  transition: transform 0.3s ease;
+  margin-left: auto;
+  padding-left: 0.5rem;
+}
+
+.multiselect-arrow.open {
+  transform: rotate(180deg);
+}
+
+/* Dropdown */
+.multiselect-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  background: white;
+  border: 2px solid #3498db;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  max-height: 400px;
+  display: flex;
+  flex-direction: column;
+  animation: dropdownSlide 0.3s ease;
+}
+
+@keyframes dropdownSlide {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.search-box {
+  padding: 0.75rem;
+  border-bottom: 1px solid #e9ecef;
+  background: #f8f9fa;
+  border-radius: 10px 10px 0 0;
+}
+
+.search-input {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border: 2px solid #dee2e6;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  transition: all 0.3s ease;
+  background: white;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.search-input::placeholder {
+  color: #adb5bd;
+}
+
+.options-list {
+  overflow-y: auto;
+  max-height: 250px;
+  padding: 0.5rem;
+}
+
+.option-item {
+  display: flex;
+  align-items: center;
+  padding: 0.65rem 0.75rem;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  gap: 0.75rem;
+}
+
+.option-item:hover {
+  background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+  transform: translateX(4px);
+}
+
+.option-checkbox {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #667eea;
+}
+
+.option-label {
+  flex: 1;
+  color: #2c3e50;
+  font-size: 0.9rem;
+  user-select: none;
+}
+
+.no-results {
+  padding: 2rem 1rem;
   text-align: center;
+  color: #7f8c8d;
+  font-size: 0.9rem;
+}
+
+.dropdown-footer {
+  padding: 0.75rem;
+  border-top: 1px solid #e9ecef;
+  background: #f8f9fa;
+  border-radius: 0 0 10px 10px;
+}
+
+.btn-clear {
+  width: 100%;
+  padding: 0.5rem;
+  background: linear-gradient(135deg, #fc5c7d 0%, #6a82fb 100%);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.btn-clear:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(252, 92, 125, 0.3);
+}
+
+.btn-clear:active {
+  transform: translateY(0);
 }
 
 .products-table-container {
@@ -958,6 +1365,32 @@ onMounted(async () => {
   
   .form-actions .btn {
     width: 100%;
+  }
+
+  .products-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .category-filter {
+    width: 100%;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .multiselect-wrapper {
+    width: 100%;
+    min-width: auto;
+    max-width: none;
+  }
+
+  .multiselect-input {
+    min-height: 50px;
+  }
+
+  .tag {
+    font-size: 0.8rem;
+    padding: 0.25rem 0.5rem;
   }
 }
 </style>
