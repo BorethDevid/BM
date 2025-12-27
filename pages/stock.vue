@@ -51,69 +51,82 @@
       <div v-if="products.length > 0" class="products-section">
         <div class="products-header">
           <h2>Products Inventory</h2>
-          <div class="category-filter">
-            <label>Filter by Category:</label>
-            <div class="multiselect-wrapper">
-              <div class="multiselect-container" @click="toggleDropdown" ref="multiselectRef">
-                <div class="multiselect-input">
-                  <div class="selected-tags">
-                    <span v-if="selectedCategories.length === 0" class="placeholder">
-                      All Categories
-                    </span>
-                    <span
-                      v-for="category in selectedCategories"
-                      :key="category"
-                      class="tag"
-                    >
-                      {{ category }}
-                      <button
-                        @click.stop="removeCategory(category)"
-                        class="tag-remove"
-                        aria-label="Remove category"
+          <div class="filters-container">
+            <div class="category-filter">
+              <label>Filter by Category:</label>
+              <div class="multiselect-wrapper">
+                <div class="multiselect-container" @click="toggleDropdown" ref="multiselectRef">
+                  <div class="multiselect-input">
+                    <div class="selected-tags">
+                      <span v-if="selectedCategories.length === 0" class="placeholder">
+                        All Categories
+                      </span>
+                      <span
+                        v-for="category in selectedCategories"
+                        :key="category"
+                        class="tag"
                       >
-                        ×
-                      </button>
-                    </span>
-                  </div>
-                  <div class="multiselect-arrow" :class="{ open: isDropdownOpen }">
-                    ▼
-                  </div>
-                </div>
-
-                <div v-if="isDropdownOpen" class="multiselect-dropdown" @click.stop>
-                  <div class="search-box">
-                    <input
-                      v-model="searchQuery"
-                      type="text"
-                      placeholder="Search categories..."
-                      class="search-input"
-                      @click.stop
-                      ref="searchInputRef"
-                    />
-                  </div>
-                  <div class="options-list">
-                    <label
-                      v-for="category in filteredCategories"
-                      :key="category.id"
-                      class="option-item"
-                    >
-                      <input
-                        type="checkbox"
-                        :value="category.name"
-                        :checked="selectedCategories.includes(category.name)"
-                        @change="toggleCategory(category.name)"
-                        class="option-checkbox"
-                      />
-                      <span class="option-label">{{ category.name }}</span>
-                    </label>
-                    <div v-if="filteredCategories.length === 0" class="no-results">
-                      No categories found
+                        {{ category }}
+                        <button
+                          @click.stop="removeCategory(category)"
+                          class="tag-remove"
+                          aria-label="Remove category"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    </div>
+                    <div class="multiselect-arrow" :class="{ open: isDropdownOpen }">
+                      ▼
                     </div>
                   </div>
-                  <div class="dropdown-footer">
-                    <button @click.stop="clearAll" class="btn-clear">Clear All</button>
+
+                  <div v-if="isDropdownOpen" class="multiselect-dropdown" @click.stop>
+                    <div class="search-box">
+                      <input
+                        v-model="searchQuery"
+                        type="text"
+                        placeholder="Search categories..."
+                        class="search-input"
+                        @click.stop
+                        ref="searchInputRef"
+                      />
+                    </div>
+                    <div class="options-list">
+                      <label
+                        v-for="category in filteredCategories"
+                        :key="category.id"
+                        class="option-item"
+                      >
+                        <input
+                          type="checkbox"
+                          :value="category.name"
+                          :checked="selectedCategories.includes(category.name)"
+                          @change="toggleCategory(category.name)"
+                          class="option-checkbox"
+                        />
+                        <span class="option-label">{{ category.name }}</span>
+                      </label>
+                      <div v-if="filteredCategories.length === 0" class="no-results">
+                        No categories found
+                      </div>
+                    </div>
+                    <div class="dropdown-footer">
+                      <button @click.stop="clearAll" class="btn-clear">Clear All</button>
+                    </div>
                   </div>
                 </div>
+              </div>
+            </div>
+
+            <div class="stock-filter">
+              <label>Filter by Stock:</label>
+              <div class="select-wrapper">
+                <select v-model="selectedStockStatus" class="stock-select">
+                  <option value="all">All Status</option>
+                  <option value="in_stock">In Stock</option>
+                  <option value="out_of_stock">Out of Stock</option>
+                </select>
               </div>
             </div>
           </div>
@@ -419,6 +432,7 @@ const categories = ref<Array<{id: number, name: string, description?: string}>>(
 
 // Multi-select category filter
 const selectedCategories = ref<string[]>([])
+const selectedStockStatus = ref('all')
 const isDropdownOpen = ref(false)
 const searchQuery = ref('')
 const multiselectRef = ref<HTMLElement | null>(null)
@@ -435,14 +449,27 @@ const filteredCategories = computed(() => {
   )
 })
 
-// Computed property for filtered products based on selected categories
+// Computed property for filtered products based on selected categories and stock status
 const filteredProducts = computed(() => {
-  if (selectedCategories.value.length === 0) {
-    return products.value
+  let result = products.value
+
+  // Filter by Category
+  if (selectedCategories.value.length > 0) {
+    result = result.filter(product =>
+      selectedCategories.value.includes(product.category)
+    )
   }
-  return products.value.filter(product =>
-    selectedCategories.value.includes(product.category)
-  )
+
+  // Filter by Stock Status
+  if (selectedStockStatus.value !== 'all') {
+    if (selectedStockStatus.value === 'in_stock') {
+      result = result.filter(product => product.stock_quantity > 0)
+    } else if (selectedStockStatus.value === 'out_of_stock') {
+      result = result.filter(product => product.stock_quantity === 0)
+    }
+  }
+
+  return result
 })
 
 // Multi-select functions
@@ -841,17 +868,53 @@ onUnmounted(() => {
   margin: 0;
 }
 
-.category-filter {
+/* Filters Container */
+.filters-container {
   display: flex;
-  align-items: center;
-  gap: 0.75rem;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  align-items: flex-end;
 }
 
-.category-filter label {
+.category-filter, .stock-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.category-filter label, .stock-filter label {
   color: #2c3e50;
   font-weight: 600;
+  font-size: 0.9rem;
+}
+
+/* Stock Select */
+.stock-select {
+  padding: 0.6rem 2.5rem 0.6rem 1rem;
+  border: 2px solid #dee2e6;
+  border-radius: 10px;
+  background-color: white;
   font-size: 0.95rem;
-  white-space: nowrap;
+  color: #2c3e50;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-width: 180px;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237f8c8d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 1rem center;
+  background-size: 1em;
+  min-height: 44px;
+}
+
+.stock-select:hover {
+  border-color: #3498db;
+}
+
+.stock-select:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
 }
 
 /* Multi-select Container */
