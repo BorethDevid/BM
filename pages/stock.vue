@@ -27,6 +27,16 @@
     
     <!-- Main Content -->
     <div v-else>
+      <!-- Action Bar -->
+      <div class="action-bar">
+        <button class="btn btn-primary" @click="addNewProduct">
+          <span>+</span> Add New Product
+        </button>
+        <button class="btn btn-secondary" @click="fetchProducts">
+          <span>🔄</span> Refresh Data
+        </button>
+      </div>
+
       <div class="stock-grid">
         <div class="stock-card">
           <h3>Total Products</h3>
@@ -193,16 +203,12 @@
         <h3>No Products Found</h3>
         <p>Your inventory is empty. Add some products to get started!</p>
       </div>
-      
-      <div class="stock-actions">
-        <button class="btn btn-primary" @click="addNewProduct">
-          Add New Product
-        </button>
-        <button class="btn btn-secondary" @click="fetchProducts">
-          Refresh Data
-        </button>
-      </div>
     </div>
+
+    <!-- Floating Action Button -->
+    <button class="fab" @click="addNewProduct" title="Add New Product">
+      <span>+</span>
+    </button>
 
     <!-- Add/Edit Product Modal -->
     <div v-if="showAddModal || showEditModal" class="modal-overlay" @click="closeModal">
@@ -727,11 +733,62 @@ onUnmounted(() => {
   font-size: 0.9rem;
 }
 
-.stock-actions {
+/* Action Bar */
+.action-bar {
   display: flex;
   gap: 1rem;
-  justify-content: center;
+  margin-bottom: 2rem;
+  justify-content: flex-start;
+  align-items: center;
   flex-wrap: wrap;
+  position: sticky;
+  top: 0;
+  background: white;
+  padding: 1rem;
+  z-index: 100;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.action-bar .btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Floating Action Button */
+.fab {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  font-weight: 300;
+  transition: all 0.3s ease;
+  z-index: 999;
+}
+
+.fab:hover {
+  transform: scale(1.1) rotate(90deg);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+}
+
+.fab:active {
+  transform: scale(0.95);
+}
+
+.fab span {
+  line-height: 1;
 }
 
 .btn {
@@ -1384,24 +1441,34 @@ onUnmounted(() => {
   .page-container {
     padding: 1rem;
   }
-  
+
   .page-header h1 {
     font-size: 2rem;
   }
-  
+
   .stock-grid {
     grid-template-columns: 1fr;
     gap: 1rem;
   }
-  
-  .stock-actions {
+
+  .action-bar {
     flex-direction: column;
-    align-items: center;
+    align-items: stretch;
+    position: relative;
+    top: auto;
   }
-  
-  .btn {
+
+  .action-bar .btn {
     width: 100%;
-    max-width: 300px;
+    justify-content: center;
+  }
+
+  .fab {
+    bottom: 1.5rem;
+    right: 1.5rem;
+    width: 56px;
+    height: 56px;
+    font-size: 1.8rem;
   }
   
   .modal-content {
