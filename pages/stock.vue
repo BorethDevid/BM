@@ -314,21 +314,8 @@ definePageMeta({
   middleware: 'auth'
 })
 
-// Stock management page with Supabase integration
-interface Product {
-  id: number
-  name: string
-  price: number
-  stock_quantity: number
-  category: string
-  created_at: string
-}
-
-interface StockData {
-  totalProducts: number
-  lowStockItems: number
-  outOfStockItems: number
-}
+// Import types
+import type { Product, StockData } from '~/types'
 
 // Reactive data
 const products = ref<Product[]>([])

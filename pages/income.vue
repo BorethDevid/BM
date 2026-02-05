@@ -297,30 +297,11 @@
 </template>
 
 <script setup lang="ts">
-interface IncomeRecord {
-  id: number
-  income_date: string
-  category: string
-  description: string
-  order_id?: number
-  amount: number
-  cost: number
-  profit: number
-  source?: string
-  payment_method?: string
-  payment_status: string
-  reference_number?: string
-  notes?: string
-  created_at: string
-}
+// Import types
+import type { IncomeRecord, IncomeCategory } from '~/types'
 
-interface Category {
-  id: number
-  name: string
-  description: string
-  icon: string
-  color: string
-}
+// Use IncomeCategory as Category for this component
+type Category = IncomeCategory
 
 const incomeRecords = ref<IncomeRecord[]>([])
 const expenseRecords = ref<any[]>([])

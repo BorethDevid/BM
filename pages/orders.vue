@@ -641,47 +641,8 @@
 </template>
 
 <script setup lang="ts">
-// Order management page
-interface Order {
-  id: number
-  customer_name: string
-  customer_email: string
-  product_name?: string // Keep for backward compatibility
-  quantity?: number // Keep for backward compatibility
-  unit_price?: number // Keep for backward compatibility
-  total_amount: number
-  status: string
-  channel?: string
-  location?: string
-  order_date?: string
-  notes?: string
-  created_at: string
-  items?: OrderItem[] // New: array of order items
-}
-
-interface OrderItem {
-  id: number
-  order_id: number
-  product_id: number
-  product_name: string
-  quantity: number
-  unit_price: number
-  total_price: number
-}
-
-// Hardcoded data interfaces
-interface Province {
-  name: string
-  type: 'Province' | 'City'
-  description: string
-}
-
-interface Channel {
-  name: string
-  type: string
-  description: string
-  icon: string
-}
+// Import types
+import type { Order, OrderItem, Province, Channel } from '~/types'
 
 
 // Reactive data

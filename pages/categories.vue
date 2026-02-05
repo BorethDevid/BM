@@ -203,21 +203,8 @@ definePageMeta({
   middleware: 'auth'
 })
 
-// Category management page
-interface Category {
-  id: number
-  name: string
-  description?: string
-  created_at: string
-}
-
-interface Product {
-  id: number
-  name: string
-  category: string
-  price: number
-  stock_quantity: number
-}
+// Import types
+import type { Category, Product } from '~/types'
 
 // Reactive data
 const categories = ref<Category[]>([])
