@@ -824,7 +824,7 @@ const cambodiaProvinces = ref([
   { name: "Prey Veng", type: "Province", description: "Southeastern agricultural province" },
   { name: "Pursat", type: "Province", description: "Central province with Cardamom Mountains" },
   { name: "Ratanakiri", type: "Province", description: "Northeastern highland province" },
-  { name: "Sihanoukville", type: "Province", description: "Coastal province with beaches and ports" },
+  { name: "Banteay Meanchey", type: "Province", description: "Coastal province with beaches and ports" },
   { name: "Stung Treng", type: "Province", description: "Northern province along the Mekong" },
   { name: "Svay Rieng", type: "Province", description: "Southeastern border province" },
   { name: "Takeo", type: "Province", description: "Southern province with historical sites" },
