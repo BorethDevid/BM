@@ -419,40 +419,23 @@
                 <div class="form-row">
                   <div class="form-group">
                     <label :for="`productSelect_${index}`">Product *</label>
-                    <div class="product-select-container">
-                      <input
-                        :id="`productSelect_${index}`"
-                        :list="`productList_${index}`"
-                        v-model="item.productSearchText"
-                        @input="onProductSearchInput(index)"
-                        @change="onProductSearchChange(index)"
-                        type="text"
-                        placeholder="Search and select a product"
-                        required
-                        class="product-select searchable-select"
-                        autocomplete="off"
+                    <el-select
+                      :id="`productSelect_${index}`"
+                      v-model="item.product_id"
+                      @change="onProductSelectChange(index)"
+                      placeholder="Search and select a product"
+                      filterable
+                      clearable
+                      required
+                      style="width: 100%"
+                    >
+                      <el-option
+                        v-for="product in products"
+                        :key="product.id"
+                        :label="`${product.name} - $${product.price.toFixed(2)} (Stock: ${product.stock_quantity})`"
+                        :value="product.id"
                       />
-                      <datalist :id="`productList_${index}`">
-                        <option
-                          v-for="product in products"
-                          :key="product.id"
-                          :value="`${product.name} - $${product.price.toFixed(2)} (Stock: ${product.stock_quantity})`"
-                          :data-id="product.id"
-                        >
-                        </option>
-                      </datalist>
-                      <button
-                        type="button"
-                        class="btn btn-sm btn-outline refresh-product-btn"
-                        @click="onProductSelect(index)"
-                        title="Refresh product details"
-                      >
-                        🔄
-                      </button>
-                    </div>
-                    <div v-if="item.product_id && !item.product_name" class="form-help error">
-                      ⚠️ Product name not set. Click the refresh button or reselect the product.
-                    </div>
+                    </el-select>
                   </div>
                   
                   <div class="form-group">
@@ -518,23 +501,22 @@
           <div class="form-row">
             <div class="form-group">
               <label for="orderStatus">Status *</label>
-              <input
+              <el-select
                 id="orderStatus"
-                list="statusList"
                 v-model="orderForm.status"
-                type="text"
                 placeholder="Search and select status"
+                filterable
+                clearable
                 required
-                class="searchable-select"
-                autocomplete="off"
-              />
-              <datalist id="statusList">
-                <option value="Pending"></option>
-                <option value="Processing"></option>
-                <option value="Shipped"></option>
-                <option value="Delivered"></option>
-                <option value="Cancelled"></option>
-              </datalist>
+                style="width: 100%"
+              >
+                <el-option
+                  v-for="status in statusOptions"
+                  :key="status"
+                  :label="status"
+                  :value="status"
+                />
+              </el-select>
             </div>
             
             <div class="form-group">
@@ -545,44 +527,40 @@
           <div class="form-row">
             <div class="form-group">
               <label for="channel">Channel</label>
-              <input
+              <el-select
                 id="channel"
-                list="channelList"
                 v-model="orderForm.channel"
-                type="text"
                 placeholder="Search and select channel"
-                class="searchable-select"
-                autocomplete="off"
-              />
-              <datalist id="channelList">
-                <option
+                filterable
+                clearable
+                style="width: 100%"
+              >
+                <el-option
                   v-for="channel in socialChannels"
                   :key="channel.name"
+                  :label="`${channel.icon} ${channel.name}`"
                   :value="channel.name"
-                >
-                </option>
-              </datalist>
+                />
+              </el-select>
             </div>
             
             <div class="form-group">
               <label for="location">Location</label>
-              <input
+              <el-select
                 id="location"
-                list="locationList"
                 v-model="orderForm.location"
-                type="text"
                 placeholder="Search and select location"
-                class="searchable-select"
-                autocomplete="off"
-              />
-              <datalist id="locationList">
-                <option
+                filterable
+                clearable
+                style="width: 100%"
+              >
+                <el-option
                   v-for="province in cambodiaProvinces"
                   :key="province.name"
+                  :label="`${province.name} (${province.type})`"
                   :value="province.name"
-                >
-                </option>
-              </datalist>
+                />
+              </el-select>
             </div>
           </div>
           
@@ -806,9 +784,8 @@ const orderForm = reactive({
   notes: '',
   items: [] as Array<{
     id?: number
-    product_id: string
+    product_id: string | number
     product_name: string
-    productSearchText: string
     quantity: number
     unit_price: number
     total_price: number
@@ -816,6 +793,14 @@ const orderForm = reactive({
 })
 
 // Hardcoded data for filter dropdowns
+const statusOptions = ref([
+  "Pending",
+  "Processing",
+  "Shipped",
+  "Delivered",
+  "Cancelled"
+])
+
 const socialChannels = ref([
   { name: "Facebook", type: "Social Network", description: "World's largest social networking platform", icon: "📘" },
   { name: "Instagram", type: "Photo Sharing", description: "Visual content sharing and social networking", icon: "📷" },
@@ -966,70 +951,18 @@ const createOrdersTable = async () => {
   }
 }
 
-// Handle product selection for multi-product orders
-const onProductSelect = (index: number) => {
+// Handle product selection change with Element Plus
+const onProductSelectChange = (index: number) => {
   const item = orderForm.items[index]
-  if (!item) return
-
-  console.log('Product selection for item:', index, 'product_id:', item.product_id) // Debug log
-  console.log('Available products:', products.value) // Debug log
-
-  // Try different comparison methods to find the product
-  let selectedProduct = products.value.find((p: {id: number, name: string, price: number, stock_quantity: number}) =>
-    p.id.toString() === item.product_id.toString()
-  )
-
-  // If not found, try with number comparison
-  if (!selectedProduct) {
-    selectedProduct = products.value.find((p: {id: number, name: string, price: number, stock_quantity: number}) =>
-      p.id === parseInt(item.product_id)
-    )
-  }
-
-  // If still not found, try with string comparison (convert id to string)
-  if (!selectedProduct) {
-    selectedProduct = products.value.find((p: {id: number, name: string, price: number, stock_quantity: number}) =>
-      p.id.toString() === item.product_id.toString()
-    )
-  }
-
-  console.log('Found selected product:', selectedProduct) // Debug log
-
-  if (selectedProduct) {
-    item.product_name = selectedProduct.name
-    item.unit_price = selectedProduct.price
-    updateItemTotal(index)
-    console.log('Updated item:', item) // Debug log
-  } else {
-    // Reset if no product selected
-    item.product_name = ''
-    item.unit_price = 0
-    item.total_price = 0
-    console.log('No product found, reset item') // Debug log
-  }
-}
-
-// Handle product search input (real-time filtering)
-const onProductSearchInput = (index: number) => {
-  // This is called on every keystroke for real-time feedback
-  // The actual selection happens in onProductSearchChange
-}
-
-// Handle product search selection change
-const onProductSearchChange = (index: number) => {
-  const item = orderForm.items[index]
-  if (!item || !item.productSearchText) {
+  if (!item || !item.product_id) {
     return
   }
 
-  // Find the product by matching the search text format
-  const selectedProduct = products.value.find((p: {id: number, name: string, price: number, stock_quantity: number}) => {
-    const optionText = `${p.name} - $${p.price.toFixed(2)} (Stock: ${p.stock_quantity})`
-    return optionText === item.productSearchText
-  })
+  const selectedProduct = products.value.find((p: {id: number, name: string, price: number, stock_quantity: number}) =>
+    p.id === item.product_id
+  )
 
   if (selectedProduct) {
-    item.product_id = selectedProduct.id.toString()
     item.product_name = selectedProduct.name
     item.unit_price = selectedProduct.price
     updateItemTotal(index)
@@ -1041,7 +974,6 @@ const addProductItem = () => {
   orderForm.items.push({
     product_id: '',
     product_name: '',
-    productSearchText: '',
     quantity: 1,
     unit_price: 0,
     total_price: 0
@@ -1088,19 +1020,6 @@ const getTotalQuantityForOrder = (order: Order) => {
   return order.quantity || 0
 }
 
-// Watch for changes in product_id to auto-update product_name
-watch(() => orderForm.items, (newItems: any) => {
-  if (newItems) {
-    newItems.forEach((item: any, index: number) => {
-      if (item.product_id && !item.product_name) {
-        // Auto-update product name if product_id is set but product_name is missing
-        onProductSelect(index)
-      }
-    })
-  }
-}, { deep: true })
-
-
 // Open add modal
 const openAddModal = () => {
   isEditing.value = false
@@ -1115,7 +1034,6 @@ const openAddModal = () => {
     items: [{
       product_id: '',
       product_name: '',
-      productSearchText: '',
       quantity: 1,
       unit_price: 0,
       total_price: 0
@@ -1140,13 +1058,10 @@ const openEditModal = (order: Order) => {
   if (order.items && order.items.length > 0) {
     // New multi-product structure
     items = order.items.map(item => {
-      const product = products.value.find((p: {id: number, name: string, price: number, stock_quantity: number}) => p.id === item.product_id)
-      const searchText = product ? `${product.name} - $${product.price.toFixed(2)} (Stock: ${product.stock_quantity})` : item.product_name
       return {
         id: item.id,
-        product_id: item.product_id.toString(),
+        product_id: item.product_id,
         product_name: item.product_name,
-        productSearchText: searchText,
         quantity: item.quantity,
         unit_price: item.unit_price,
         total_price: item.total_price
@@ -1155,11 +1070,9 @@ const openEditModal = (order: Order) => {
   } else if (order.product_name) {
     // Legacy single-product structure - convert to new format
     const product = products.value.find((p: {id: number, name: string, price: number, stock_quantity: number}) => p.name === order.product_name)
-    const searchText = product ? `${product.name} - $${product.price.toFixed(2)} (Stock: ${product.stock_quantity})` : order.product_name
     items = [{
-      product_id: product?.id.toString() || '',
+      product_id: product?.id || '',
       product_name: order.product_name,
-      productSearchText: searchText,
       quantity: order.quantity || 1,
       unit_price: order.unit_price || 0,
       total_price: (order.quantity || 1) * (order.unit_price || 0)
@@ -1169,7 +1082,6 @@ const openEditModal = (order: Order) => {
     items = [{
       product_id: '',
       product_name: '',
-      productSearchText: '',
       quantity: 1,
       unit_price: 0,
       total_price: 0
@@ -1449,32 +1361,33 @@ const saveOrder = async () => {
       if (!orderToEdit.value?.id) {
         throw new Error('Order ID is missing. Cannot update order.')
       }
-      
-      console.log('Updating order with ID:', orderToEdit.value.id)
-      
+
+      const orderId = orderToEdit.value.id
+      console.log('Updating order with ID:', orderId)
+
       const { update, delete: deleteRecord } = useSupabaseDB()
-      
+
       // Update the main order record
-      const { error: orderError } = await update('orders', orderData).eq('id', orderToEdit.value.id)
+      const { error: orderError } = await update('orders', orderData).eq('id', orderId)
       if (orderError) throw orderError
-      
+
       // Delete existing order items
-      const { error: deleteError } = await deleteRecord('order_items').eq('order_id', orderToEdit.value.id)
+      const { error: deleteError } = await deleteRecord('order_items').eq('order_id', orderId)
       if (deleteError) throw deleteError
-      
+
       // Insert new order items
       const orderItemsData = orderForm.items.map((item: any) => ({
-        order_id: orderToEdit.value.id,
+        order_id: orderId,
         product_id: parseInt(item.product_id),
         quantity: item.quantity,
         unit_price: item.unit_price,
         total_price: item.total_price
       }))
-      
+
       const { insert } = useSupabaseDB()
       const { error: itemsError } = await insert('order_items', orderItemsData)
       if (itemsError) throw itemsError
-      
+
     } else {
       // Add new order
       const { insert } = useSupabaseDB()
@@ -2472,24 +2385,9 @@ onMounted(async () => {
   box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
 }
 
-/* Searchable Select Styles */
-.searchable-select {
-  background-color: white;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23333' d='M10.293 3.293L6 7.586 1.707 3.293A1 1 0 00.293 4.707l5 5a1 1 0 001.414 0l5-5a1 1 0 10-1.414-1.414z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0.75rem center;
-  background-size: 12px 12px;
-  padding-right: 2.5rem;
-  cursor: pointer;
-}
-
-.searchable-select::-webkit-calendar-picker-indicator {
-  opacity: 0;
-  position: absolute;
-  right: 0;
+/* Element Plus el-select custom styling */
+.el-select {
   width: 100%;
-  height: 100%;
-  cursor: pointer;
 }
 
 .form-help {
