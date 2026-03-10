@@ -375,13 +375,12 @@
             </div>
             
             <div class="form-group">
-              <label for="customerEmail">Customer Info *</label>
+              <label for="customerEmail">Customer Info</label>
               <input
                 id="customerEmail"
                 v-model="orderForm.customer_email"
                 type="text"
                 placeholder="Enter customer information"
-                required
               />
             </div>
           </div>
@@ -421,25 +420,29 @@
                   <div class="form-group">
                     <label :for="`productSelect_${index}`">Product *</label>
                     <div class="product-select-container">
-                      <select
+                      <input
                         :id="`productSelect_${index}`"
-                        v-model="item.product_id"
-                        @change="onProductSelect(index)"
+                        :list="`productList_${index}`"
+                        v-model="item.productSearchText"
+                        @input="onProductSearchInput(index)"
+                        @change="onProductSearchChange(index)"
+                        type="text"
+                        placeholder="Search and select a product"
                         required
-                        class="product-select"
-                      >
-                        <option value="">Select a product</option>
-                        <option 
-                          v-for="product in products" 
-                          :key="product.id" 
-                          :value="product.id"
-                          :disabled="isProductAlreadySelected(product.id, index)"
+                        class="product-select searchable-select"
+                        autocomplete="off"
+                      />
+                      <datalist :id="`productList_${index}`">
+                        <option
+                          v-for="product in products"
+                          :key="product.id"
+                          :value="`${product.name} - $${product.price.toFixed(2)} (Stock: ${product.stock_quantity})`"
+                          :data-id="product.id"
                         >
-                          {{ product.name }} - ${{ product.price.toFixed(2) }} (Stock: {{ product.stock_quantity }})
                         </option>
-                      </select>
-                      <button 
-                        type="button" 
+                      </datalist>
+                      <button
+                        type="button"
                         class="btn btn-sm btn-outline refresh-product-btn"
                         @click="onProductSelect(index)"
                         title="Refresh product details"
@@ -515,18 +518,23 @@
           <div class="form-row">
             <div class="form-group">
               <label for="orderStatus">Status *</label>
-              <select
+              <input
                 id="orderStatus"
+                list="statusList"
                 v-model="orderForm.status"
+                type="text"
+                placeholder="Search and select status"
                 required
-              >
-                <option value="">Select status</option>
-                <option value="Pending">Pending</option>
-                <option value="Processing">Processing</option>
-                <option value="Shipped">Shipped</option>
-                <option value="Delivered">Delivered</option>
-                <option value="Cancelled">Cancelled</option>
-              </select>
+                class="searchable-select"
+                autocomplete="off"
+              />
+              <datalist id="statusList">
+                <option value="Pending"></option>
+                <option value="Processing"></option>
+                <option value="Shipped"></option>
+                <option value="Delivered"></option>
+                <option value="Cancelled"></option>
+              </datalist>
             </div>
             
             <div class="form-group">
@@ -537,36 +545,44 @@
           <div class="form-row">
             <div class="form-group">
               <label for="channel">Channel</label>
-              <select
+              <input
                 id="channel"
+                list="channelList"
                 v-model="orderForm.channel"
-              >
-                <option value="">Select channel</option>
-                <option 
-                  v-for="channel in socialChannels" 
-                  :key="channel.name" 
+                type="text"
+                placeholder="Search and select channel"
+                class="searchable-select"
+                autocomplete="off"
+              />
+              <datalist id="channelList">
+                <option
+                  v-for="channel in socialChannels"
+                  :key="channel.name"
                   :value="channel.name"
                 >
-                  {{ channel.icon }} {{ channel.name }}
                 </option>
-              </select>
+              </datalist>
             </div>
             
             <div class="form-group">
               <label for="location">Location</label>
-              <select
+              <input
                 id="location"
+                list="locationList"
                 v-model="orderForm.location"
-              >
-                <option value="">Select location</option>
-                <option 
-                  v-for="province in cambodiaProvinces" 
-                  :key="province.name" 
+                type="text"
+                placeholder="Search and select location"
+                class="searchable-select"
+                autocomplete="off"
+              />
+              <datalist id="locationList">
+                <option
+                  v-for="province in cambodiaProvinces"
+                  :key="province.name"
                   :value="province.name"
                 >
-                  {{ province.name }} ({{ province.type }})
                 </option>
-              </select>
+              </datalist>
             </div>
           </div>
           
@@ -792,6 +808,7 @@ const orderForm = reactive({
     id?: number
     product_id: string
     product_name: string
+    productSearchText: string
     quantity: number
     unit_price: number
     total_price: number
@@ -953,31 +970,31 @@ const createOrdersTable = async () => {
 const onProductSelect = (index: number) => {
   const item = orderForm.items[index]
   if (!item) return
-  
+
   console.log('Product selection for item:', index, 'product_id:', item.product_id) // Debug log
   console.log('Available products:', products.value) // Debug log
-  
+
   // Try different comparison methods to find the product
-  let selectedProduct = products.value.find((p: {id: number, name: string, price: number, stock_quantity: number}) => 
+  let selectedProduct = products.value.find((p: {id: number, name: string, price: number, stock_quantity: number}) =>
     p.id.toString() === item.product_id.toString()
   )
-  
+
   // If not found, try with number comparison
   if (!selectedProduct) {
-    selectedProduct = products.value.find((p: {id: number, name: string, price: number, stock_quantity: number}) => 
+    selectedProduct = products.value.find((p: {id: number, name: string, price: number, stock_quantity: number}) =>
       p.id === parseInt(item.product_id)
     )
   }
-  
+
   // If still not found, try with string comparison (convert id to string)
   if (!selectedProduct) {
-    selectedProduct = products.value.find((p: {id: number, name: string, price: number, stock_quantity: number}) => 
+    selectedProduct = products.value.find((p: {id: number, name: string, price: number, stock_quantity: number}) =>
       p.id.toString() === item.product_id.toString()
     )
   }
-  
+
   console.log('Found selected product:', selectedProduct) // Debug log
-  
+
   if (selectedProduct) {
     item.product_name = selectedProduct.name
     item.unit_price = selectedProduct.price
@@ -992,11 +1009,39 @@ const onProductSelect = (index: number) => {
   }
 }
 
+// Handle product search input (real-time filtering)
+const onProductSearchInput = (index: number) => {
+  // This is called on every keystroke for real-time feedback
+  // The actual selection happens in onProductSearchChange
+}
+
+// Handle product search selection change
+const onProductSearchChange = (index: number) => {
+  const item = orderForm.items[index]
+  if (!item || !item.productSearchText) {
+    return
+  }
+
+  // Find the product by matching the search text format
+  const selectedProduct = products.value.find((p: {id: number, name: string, price: number, stock_quantity: number}) => {
+    const optionText = `${p.name} - $${p.price.toFixed(2)} (Stock: ${p.stock_quantity})`
+    return optionText === item.productSearchText
+  })
+
+  if (selectedProduct) {
+    item.product_id = selectedProduct.id.toString()
+    item.product_name = selectedProduct.name
+    item.unit_price = selectedProduct.price
+    updateItemTotal(index)
+  }
+}
+
 // Add a new product item to the order
 const addProductItem = () => {
   orderForm.items.push({
     product_id: '',
     product_name: '',
+    productSearchText: '',
     quantity: 1,
     unit_price: 0,
     total_price: 0
@@ -1070,6 +1115,7 @@ const openAddModal = () => {
     items: [{
       product_id: '',
       product_name: '',
+      productSearchText: '',
       quantity: 1,
       unit_price: 0,
       total_price: 0
@@ -1093,20 +1139,27 @@ const openEditModal = (order: Order) => {
   
   if (order.items && order.items.length > 0) {
     // New multi-product structure
-    items = order.items.map(item => ({
-      id: item.id,
-      product_id: item.product_id.toString(),
-      product_name: item.product_name,
-      quantity: item.quantity,
-      unit_price: item.unit_price,
-      total_price: item.total_price
-    }))
+    items = order.items.map(item => {
+      const product = products.value.find((p: {id: number, name: string, price: number, stock_quantity: number}) => p.id === item.product_id)
+      const searchText = product ? `${product.name} - $${product.price.toFixed(2)} (Stock: ${product.stock_quantity})` : item.product_name
+      return {
+        id: item.id,
+        product_id: item.product_id.toString(),
+        product_name: item.product_name,
+        productSearchText: searchText,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        total_price: item.total_price
+      }
+    })
   } else if (order.product_name) {
     // Legacy single-product structure - convert to new format
     const product = products.value.find((p: {id: number, name: string, price: number, stock_quantity: number}) => p.name === order.product_name)
+    const searchText = product ? `${product.name} - $${product.price.toFixed(2)} (Stock: ${product.stock_quantity})` : order.product_name
     items = [{
       product_id: product?.id.toString() || '',
       product_name: order.product_name,
+      productSearchText: searchText,
       quantity: order.quantity || 1,
       unit_price: order.unit_price || 0,
       total_price: (order.quantity || 1) * (order.unit_price || 0)
@@ -1116,6 +1169,7 @@ const openEditModal = (order: Order) => {
     items = [{
       product_id: '',
       product_name: '',
+      productSearchText: '',
       quantity: 1,
       unit_price: 0,
       total_price: 0
@@ -1315,7 +1369,7 @@ const saveOrder = async () => {
     saving.value = true
     
     // Validate form
-    if (!orderForm.customer_name || !orderForm.customer_email || !orderForm.status) {
+    if (!orderForm.customer_name || !orderForm.status) {
       alert('Please fill in all required fields')
       return
     }
@@ -2416,6 +2470,26 @@ onMounted(async () => {
   outline: none;
   border-color: #3498db;
   box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+/* Searchable Select Styles */
+.searchable-select {
+  background-color: white;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23333' d='M10.293 3.293L6 7.586 1.707 3.293A1 1 0 00.293 4.707l5 5a1 1 0 001.414 0l5-5a1 1 0 10-1.414-1.414z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 12px 12px;
+  padding-right: 2.5rem;
+  cursor: pointer;
+}
+
+.searchable-select::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  position: absolute;
+  right: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
 }
 
 .form-help {
