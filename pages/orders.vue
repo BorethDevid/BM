@@ -57,31 +57,26 @@
       <div v-if="showFilters" class="filter-panel">
         <div class="filter-header">
           <h3>🔍 Filter Orders</h3>
-          <button class="btn btn-sm btn-outline" @click="clearFilters">
+          <el-button size="small" @click="clearFilters">
             Clear All
-          </button>
+          </el-button>
         </div>
         
         <div class="filter-grid">
           <!-- Date Range -->
           <div class="filter-group">
             <label>Date Range</label>
-            <div class="date-range">
-              <input 
-                type="date" 
-                v-model="filters.dateFrom" 
-                placeholder="From Date"
-                class="form-input"
-                title="From Date"
-              />
-              <input 
-                type="date" 
-                v-model="filters.dateTo" 
-                placeholder="To Date"
-                class="form-input"
-                title="To Date"
-              />
-            </div>
+            <el-date-picker
+              v-model="dateRange"
+              type="daterange"
+              range-separator="to"
+              start-placeholder="From Date"
+              end-placeholder="To Date"
+              value-format="YYYY-MM-DD"
+              unlink-panels
+              clearable
+              class="filter-date-picker"
+            />
           </div>
           
           <!-- Status Filter - COMMENTED OUT -->
@@ -175,12 +170,12 @@
             </span>
           </div>
           <div class="filter-actions">
-            <button class="btn btn-sm btn-outline" @click="clearFilters">
+            <el-button size="small" @click="clearFilters">
               Clear
-            </button>
-            <button class="btn btn-sm btn-primary" @click="applyFilters">
+            </el-button>
+            <el-button size="small" type="primary" @click="applyFilters">
               Apply Filters
-            </button>
+            </el-button>
           </div>
         </div>
       </div>
@@ -726,6 +721,8 @@ const columnOrder = ref([
 ])
 
 // Filter states
+const route = useRoute()
+const router = useRouter()
 const showFilters = ref(false)
 const filtersApplied = ref(false) // Track if filters are currently applied
 const filters = ref({
@@ -738,6 +735,19 @@ const filters = ref({
   productName: '',
   minAmount: '',
   maxAmount: ''
+})
+
+// Bridge model for el-date-picker daterange (array of [from, to])
+const dateRange = computed({
+  get() {
+    return filters.value.dateFrom || filters.value.dateTo
+      ? [filters.value.dateFrom, filters.value.dateTo]
+      : null
+  },
+  set(val: [string, string] | null) {
+    filters.value.dateFrom = val?.[0] || ''
+    filters.value.dateTo = val?.[1] || ''
+  }
 })
 
 
@@ -1558,12 +1568,31 @@ const clearFilters = () => {
     maxAmount: ''
   }
   filtersApplied.value = false // Clear applied state
+  // Remove filter params from URL
+  router.replace({ query: {} })
 }
 
 const applyFilters = () => {
   // Apply the current filter settings
   filtersApplied.value = true
-  console.log('Filters applied:', filters.value)
+  // Persist active filter values to URL query so they survive a refresh
+  const query: Record<string, string> = {}
+  if (filters.value.dateFrom) query.dateFrom = filters.value.dateFrom
+  if (filters.value.dateTo) query.dateTo = filters.value.dateTo
+  router.replace({ query })
+}
+
+// Restore filters from URL query on load
+const restoreFiltersFromQuery = () => {
+  const q = route.query
+  const dateFrom = typeof q.dateFrom === 'string' ? q.dateFrom : ''
+  const dateTo = typeof q.dateTo === 'string' ? q.dateTo : ''
+  if (dateFrom || dateTo) {
+    filters.value.dateFrom = dateFrom
+    filters.value.dateTo = dateTo
+    filtersApplied.value = true
+    showFilters.value = true
+  }
 }
 
 // Computed properties for filtering
@@ -1679,6 +1708,7 @@ onMounted(async () => {
   loadColumnPreferences() // Load saved column preferences
   loadColumnOrder() // Load saved column order
   loadTableWidthPreference() // Load saved table width preference
+  restoreFiltersFromQuery() // Restore filters from URL query string
 
   // Test database connection first
   const connectionOk = await testDatabaseConnection()
@@ -1802,6 +1832,10 @@ onMounted(async () => {
   display: flex;
   gap: 0.75rem;
   flex-wrap: wrap;
+}
+
+.filter-date-picker {
+  width: 100%;
 }
 
 .date-range input,
