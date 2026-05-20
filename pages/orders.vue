@@ -1026,9 +1026,9 @@ const openAddModal = () => {
   Object.assign(orderForm, {
     customer_name: '',
     customer_email: '',
-    status: '',
-    channel: '',
-    location: '',
+    status: 'Delivered',
+    channel: 'Facebook',
+    location: 'Phnom Penh',
     order_date: getCurrentDate(), // Set default to today
     notes: '',
     items: [{
