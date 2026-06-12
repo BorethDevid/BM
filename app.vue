@@ -14,7 +14,7 @@ const { isAuthenticated } = useAuth()
 
 // Only show navigation bar for authenticated users and not on login page
 const showNavigation = computed(() => {
-  // In production, be more strict about showing navigation
+  // In production, be more strict about showing navigationn
   if (typeof window === 'undefined') {
     return false // Never show navigation on server side
   }

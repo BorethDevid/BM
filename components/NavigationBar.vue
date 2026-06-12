@@ -58,6 +58,14 @@
           <span class="item-text">Income</span>
         </NuxtLink>
         <NuxtLink
+          to="/mellow-product"
+          class="sidebar-item"
+          :class="{ active: $route.path === '/mellow-product' }"
+        >
+          <span class="item-icon">🧸</span>
+          <span class="item-text">Mellow Product</span>
+        </NuxtLink>
+        <NuxtLink
           to="/data"
           class="sidebar-item"
           :class="{ active: $route.path === '/data' }"
