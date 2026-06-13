@@ -74,10 +74,10 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(product, index) in sortedProducts" :key="product.id">
+              <tr v-for="(product, index) in paginatedProducts" :key="product.id">
                 <td v-for="columnKey in columnOrder" :key="columnKey">
-                  <!-- Index -->
-                  <span v-if="columnKey === 'index'">{{ index + 1 }}</span>
+                  <!-- Index (global position across all pages) -->
+                  <span v-if="columnKey === 'index'">{{ (currentPage - 1) * pageSize + index + 1 }}</span>
 
                   <!-- Name -->
                   <span v-else-if="columnKey === 'name'" class="product-name">{{ product.name }}</span>
@@ -136,6 +136,28 @@
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- Pagination Controls -->
+        <div class="pagination">
+          <div class="pagination-info">
+            Showing {{ rangeStart }}–{{ rangeEnd }} of {{ sortedProducts.length }}
+          </div>
+          <div class="pagination-controls">
+            <label class="page-size">
+              Per page
+              <select v-model.number="pageSize">
+                <option v-for="size in pageSizeOptions" :key="size" :value="size">{{ size }}</option>
+              </select>
+            </label>
+            <button class="btn btn-secondary btn-sm" :disabled="currentPage <= 1" @click="goToPage(currentPage - 1)">
+              ‹ Prev
+            </button>
+            <span class="page-status">Page {{ currentPage }} / {{ totalPages }}</span>
+            <button class="btn btn-secondary btn-sm" :disabled="currentPage >= totalPages" @click="goToPage(currentPage + 1)">
+              Next ›
+            </button>
+          </div>
         </div>
       </div>
 
@@ -430,6 +452,45 @@ const sortedProducts = computed(() => {
     })
     return nameSortDir.value === 'asc' ? cmp : -cmp
   })
+})
+
+// ==============================================
+// Pagination (client-side over the sorted list)
+// ==============================================
+const pageSizeOptions = [10, 20, 50, 100]
+const pageSize = ref(20)
+const currentPage = ref(1)
+
+const totalPages = computed(() =>
+  Math.max(1, Math.ceil(sortedProducts.value.length / pageSize.value))
+)
+
+const paginatedProducts = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return sortedProducts.value.slice(start, start + pageSize.value)
+})
+
+// 1-based display range of the current page, e.g. "21–40 of 48"
+const rangeStart = computed(() =>
+  sortedProducts.value.length === 0 ? 0 : (currentPage.value - 1) * pageSize.value + 1
+)
+const rangeEnd = computed(() =>
+  Math.min(currentPage.value * pageSize.value, sortedProducts.value.length)
+)
+
+const goToPage = (page: number) => {
+  currentPage.value = Math.min(Math.max(1, page), totalPages.value)
+}
+
+// Keep the current page valid when the underlying list shrinks (delete) or
+// the page size grows. Clamping here covers fetch, sort and page-size changes.
+watch(totalPages, (max) => {
+  if (currentPage.value > max) currentPage.value = max
+})
+
+// Resetting to the first page on sort/page-size change keeps the view predictable.
+watch([nameSortDir, pageSize], () => {
+  currentPage.value = 1
 })
 
 const getColumnLabel = (columnKey: string) => {
@@ -885,6 +946,57 @@ onMounted(() => {
 .btn-delete:hover { background-color: #c82333; }
 .btn-danger { background-color: #dc3545; color: white; }
 .btn-danger:hover { background-color: #c82333; }
+
+/* Pagination */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding: 0.75rem 0.25rem;
+}
+
+.pagination-info {
+  color: #7f8c8d;
+  font-size: 0.9rem;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.page-size {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+  color: #5a6c7d;
+}
+
+.page-size select {
+  padding: 0.35rem 0.5rem;
+  border: 2px solid #dee2e6;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.page-status {
+  font-size: 0.9rem;
+  color: #2c3e50;
+  min-width: 90px;
+  text-align: center;
+}
+
+.pagination .btn-sm {
+  padding: 0.4rem 0.9rem;
+  font-size: 0.9rem;
+}
 
 /* Empty State */
 .empty-state {

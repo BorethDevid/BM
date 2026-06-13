@@ -84,17 +84,13 @@
             <span class="user-role">{{ currentUser?.role }}</span>
           </div>
         </div>
+        <button @click="handleLogout" class="logout-btn">
+          <span class="logout-icon">🚪</span>
+          <span class="logout-text">Logout</span>
+        </button>
       </div>
     </div>
   </nav>
-  
-  <!-- Fixed Logout Button - Always visible at bottom of screen -->
-  <div class="fixed-logout">
-    <button @click="handleLogout" class="logout-btn">
-      <span class="logout-icon">🚪</span>
-      <span class="logout-text">Logout</span>
-    </button>
-  </div>
 </template>
 
 <script setup lang="ts">
@@ -266,20 +262,15 @@ const handleLogout = () => {
   font-weight: 500;
 }
 
-/* Fixed Logout Button - Always visible at bottom of screen */
-.fixed-logout {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  z-index: 1001;
-}
-
+/* Logout Button - lives in the sidebar user section */
 .logout-btn {
+  width: 100%;
+  margin-top: 1rem;
   background: linear-gradient(135deg, #ef4444, #dc2626);
   border: none;
   color: white;
-  padding: 1rem 1.5rem;
-  border-radius: 50px;
+  padding: 0.85rem 1.5rem;
+  border-radius: 8px;
   cursor: pointer;
   font-size: 0.9rem;
   font-weight: 600;
@@ -288,18 +279,17 @@ const handleLogout = () => {
   align-items: center;
   justify-content: center;
   gap: 0.75rem;
-  box-shadow: 0 8px 20px rgba(239, 68, 68, 0.4);
-  min-width: 120px;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
 }
 
 .logout-btn:hover {
   background: linear-gradient(135deg, #dc2626, #b91c1c);
-  transform: translateY(-3px);
-  box-shadow: 0 12px 25px rgba(239, 68, 68, 0.5);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(239, 68, 68, 0.45);
 }
 
 .logout-btn:active {
-  transform: translateY(-1px);
+  transform: translateY(0);
 }
 
 .logout-icon {
@@ -394,17 +384,13 @@ const handleLogout = () => {
     font-size: 0.7rem;
   }
   
-  .fixed-logout {
-    bottom: 15px;
-    right: 15px;
-  }
-  
   .logout-btn {
-    padding: 0.75rem 1rem;
+    width: auto;
+    margin-top: 0.5rem;
+    padding: 0.6rem 1rem;
     font-size: 0.8rem;
-    min-width: 100px;
   }
-  
+
   .logout-text {
     display: none;
   }
