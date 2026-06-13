@@ -170,12 +170,28 @@
           <div class="form-row">
             <div class="form-group">
               <label for="priceBuyYuan">Price Buy ¥</label>
-              <input id="priceBuyYuan" v-model.number="productForm.price_buy_yuan" type="number" min="0" step="0.01" placeholder="0.00" />
+              <input id="priceBuyYuan" v-model.number="productForm.price_buy_yuan" type="number" min="0" step="0.01" placeholder="0.00" @input="convertYuanToUsd" />
             </div>
             <div class="form-group">
-              <label for="priceBuyUsd">Price Buy $</label>
+              <label for="priceBuyUsd">
+                Price Buy $
+                <span class="hint">(auto from ¥ × live rate)</span>
+              </label>
               <input id="priceBuyUsd" v-model.number="productForm.price_buy_usd" type="number" min="0" step="0.01" placeholder="0.00" />
             </div>
+          </div>
+
+          <div class="rate-banner">
+            <span v-if="rateLoading">Loading live exchange rate…</span>
+            <template v-else-if="cnyToUsdRate">
+              <span class="rate-value">Live rate: ¥1 = ${{ cnyToUsdRate.toFixed(4) }}</span>
+              <button type="button" class="rate-refresh" :disabled="rateLoading" @click="fetchExchangeRate" title="Refresh rate">↻</button>
+              <span v-if="rateUpdatedAt" class="rate-updated">{{ rateUpdatedAt }}</span>
+            </template>
+            <span v-else class="rate-error">
+              {{ rateError || 'Rate unavailable' }}
+              <button type="button" class="rate-refresh" :disabled="rateLoading" @click="fetchExchangeRate" title="Retry">↻</button>
+            </span>
           </div>
 
           <div class="form-row">
@@ -316,6 +332,46 @@ watch(
     productForm.price_total_per_unit_usd = Number(((buy || 0) + (delivery || 0)).toFixed(2))
   }
 )
+
+// ==============================================
+// Live CNY -> USD exchange rate
+// Free, no-key endpoint. We fetch once on mount and on manual refresh,
+// then convert Price Buy ¥ -> Price Buy $ as the user types in the ¥ field.
+// ==============================================
+const cnyToUsdRate = ref<number | null>(null)
+const rateLoading = ref(false)
+const rateUpdatedAt = ref('')
+const rateError = ref<string | null>(null)
+
+const fetchExchangeRate = async () => {
+  try {
+    rateLoading.value = true
+    rateError.value = null
+    const data = await $fetch<any>('https://open.er-api.com/v6/latest/CNY')
+    const usd = data?.rates?.USD
+    if (typeof usd === 'number' && usd > 0) {
+      cnyToUsdRate.value = usd
+      rateUpdatedAt.value = data?.time_last_update_utc || ''
+      // Keep the converted $ in sync if a ¥ value is already entered.
+      convertYuanToUsd()
+    } else {
+      throw new Error('USD rate missing in response')
+    }
+  } catch (err) {
+    console.error('Error fetching exchange rate:', err)
+    rateError.value = 'Could not load live rate'
+  } finally {
+    rateLoading.value = false
+  }
+}
+
+// Recompute Price Buy $ from Price Buy ¥ using the live rate.
+// Triggered on ¥ input; the existing total watch then updates the unit total.
+const convertYuanToUsd = () => {
+  if (cnyToUsdRate.value == null) return
+  const yuan = productForm.price_buy_yuan || 0
+  productForm.price_buy_usd = Number((yuan * cnyToUsdRate.value).toFixed(2))
+}
 
 // ==============================================
 // Column ordering (drag-and-drop) — required by rules.md
@@ -587,6 +643,7 @@ const formatYuan = (value: number | null) => {
 onMounted(() => {
   loadColumnOrder()
   fetchProducts()
+  fetchExchangeRate()
 })
 </script>
 
@@ -870,6 +927,46 @@ onMounted(() => {
   font-weight: 400;
   font-size: 0.8rem;
   color: #7f8c8d;
+}
+
+.rate-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin: -0.25rem 0 0.5rem;
+  font-size: 0.85rem;
+  color: #5a6c7d;
+}
+
+.rate-banner .rate-value {
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.rate-banner .rate-updated {
+  font-size: 0.75rem;
+  color: #95a5a6;
+}
+
+.rate-banner .rate-error {
+  color: #c0392b;
+}
+
+.rate-refresh {
+  border: 1px solid #dee2e6;
+  background: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 0.1rem 0.45rem;
+  font-size: 0.9rem;
+  line-height: 1;
+  color: #2c3e50;
+}
+
+.rate-refresh:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .form-group input[type="text"],
