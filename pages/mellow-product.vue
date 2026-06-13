@@ -429,7 +429,7 @@ const dragOverColumn = ref<string | null>(null)
 // Sort by Name (asc / desc / none)
 // Clicking the indicator cycles: none -> asc -> desc -> none
 // ==============================================
-const nameSortDir = ref<'asc' | 'desc' | null>(null)
+const nameSortDir = ref<'asc' | 'desc' | null>('asc')
 
 const nameSortIcon = computed(() =>
   nameSortDir.value === 'asc' ? '▲' : nameSortDir.value === 'desc' ? '▼' : '⇅'
