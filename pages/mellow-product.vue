@@ -62,12 +62,19 @@
                   <div class="header-content">
                     <span class="drag-handle">⋮⋮</span>
                     <span class="header-text">{{ getColumnLabel(columnKey) }}</span>
+                    <span
+                      v-if="columnKey === 'name'"
+                      class="sort-indicator"
+                      :class="{ active: nameSortDir }"
+                      title="Sort by name"
+                      @click.stop="toggleNameSort"
+                    >{{ nameSortIcon }}</span>
                   </div>
                 </th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(product, index) in products" :key="product.id">
+              <tr v-for="(product, index) in sortedProducts" :key="product.id">
                 <td v-for="columnKey in columnOrder" :key="columnKey">
                   <!-- Index -->
                   <span v-if="columnKey === 'index'">{{ index + 1 }}</span>
@@ -395,6 +402,35 @@ const columnOrder = ref(availableColumns.map(c => c.key))
 
 const draggedColumn = ref<string | null>(null)
 const dragOverColumn = ref<string | null>(null)
+
+// ==============================================
+// Sort by Name (asc / desc / none)
+// Clicking the indicator cycles: none -> asc -> desc -> none
+// ==============================================
+const nameSortDir = ref<'asc' | 'desc' | null>(null)
+
+const nameSortIcon = computed(() =>
+  nameSortDir.value === 'asc' ? '▲' : nameSortDir.value === 'desc' ? '▼' : '⇅'
+)
+
+const toggleNameSort = () => {
+  nameSortDir.value =
+    nameSortDir.value === 'asc' ? 'desc' : nameSortDir.value === 'desc' ? null : 'asc'
+}
+
+// Sorted view of products used by the table. When no sort is active the
+// original fetch order (id desc) is preserved. Numeric-aware compare so
+// B003 < B050 (and B2 < B10) order correctly.
+const sortedProducts = computed(() => {
+  if (!nameSortDir.value) return products.value
+  return [...products.value].sort((a, b) => {
+    const cmp = (a.name || '').localeCompare(b.name || '', undefined, {
+      numeric: true,
+      sensitivity: 'base'
+    })
+    return nameSortDir.value === 'asc' ? cmp : -cmp
+  })
+})
 
 const getColumnLabel = (columnKey: string) => {
   const column = availableColumns.find(col => col.key === columnKey)
@@ -805,6 +841,19 @@ onMounted(() => {
 .draggable-header:hover .drag-handle { opacity: 1; }
 .draggable-header.dragging .drag-handle { cursor: grabbing; }
 .header-text { flex: 1; }
+
+/* Name sort indicator */
+.sort-indicator {
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: #adb5bd;
+  user-select: none;
+  padding: 0 0.15rem;
+  transition: color 0.2s ease;
+}
+
+.sort-indicator:hover { color: #2c3e50; }
+.sort-indicator.active { color: #3498db; }
 
 /* Picture cells */
 .pic-cell { display: flex; align-items: center; }
