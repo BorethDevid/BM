@@ -28,6 +28,24 @@
 
     <!-- Main Content -->
     <div v-else>
+      <!-- Category Tabs -->
+      <div class="category-tabs">
+        <button
+          v-for="cat in categoryTabs"
+          :key="cat.value"
+          class="category-tab"
+          :class="{ active: cat.value === activeCategory }"
+          @click="setActiveCategory(cat.value)"
+        >
+          <span class="cat-icon">{{ cat.icon }}</span>
+          <span class="cat-label">{{ cat.label }}</span>
+          <span class="cat-count">{{ cat.count }}</span>
+        </button>
+        <button class="category-tab add-category-tab" title="Add a new category" @click="addCategory">
+          + Category
+        </button>
+      </div>
+
       <!-- Action Bar -->
       <div class="action-bar">
         <button class="btn btn-primary" @click="openAddModal">
@@ -39,7 +57,7 @@
       </div>
 
       <!-- Products Table -->
-      <div v-if="products.length > 0" class="products-section">
+      <div v-if="sortedProducts.length > 0" class="products-section">
         <div class="table-container">
           <table class="products-table">
             <thead>
@@ -92,7 +110,8 @@
                         v-for="(c, ci) in product.colors"
                         :key="ci"
                         class="color-tag"
-                      >{{ c.color }}: {{ c.qty }}</span>
+                        :title="formatColorCount(c)"
+                      >{{ c.color }}: {{ formatColorCount(c) }}</span>
                     </template>
                     <span v-else class="no-data">-</span>
                   </div>
@@ -175,10 +194,10 @@
 
       <!-- Empty State -->
       <div v-else class="empty-state">
-        <h3>No Products Found</h3>
-        <p>Create your first mellow product to get started!</p>
+        <h3>No Products in {{ activeCategoryLabel }}</h3>
+        <p>Add your first {{ activeCategoryLabel }} product to get started!</p>
         <button class="btn btn-primary" @click="openAddModal">
-          Add First Product
+          Add Product
         </button>
       </div>
     </div>
@@ -192,9 +211,19 @@
         </div>
 
         <form @submit.prevent="saveProduct" class="product-form">
-          <div class="form-group">
-            <label for="name">Name *</label>
-            <input id="name" v-model="productForm.name" type="text" placeholder="Enter product name" required />
+          <div class="form-row">
+            <div class="form-group">
+              <label for="name">Name *</label>
+              <input id="name" v-model="productForm.name" type="text" placeholder="Enter product name" required />
+            </div>
+            <div class="form-group">
+              <label for="category">Category *</label>
+              <select id="category" v-model="productForm.category" class="category-select">
+                <option v-for="cat in categoryTabs" :key="cat.value" :value="cat.value">
+                  {{ cat.icon }} {{ cat.label }}
+                </option>
+              </select>
+            </div>
           </div>
 
           <div class="form-row">
@@ -224,10 +253,55 @@
           <div class="form-group">
             <label>
               Colors &amp; Quantity
-              <span class="hint">(add a row per color for multi-color products)</span>
+              <span class="hint">
+                {{ formNeedsSizes
+                  ? '(add a color, then a row per size to count stock)'
+                  : '(add a row per color for multi-color products)' }}
+              </span>
             </label>
 
-            <div v-if="productForm.colors.length" class="color-rows">
+            <!-- Sized layout (e.g. shoes): each color has its own size rows -->
+            <div v-if="formNeedsSizes && productForm.colors.length" class="color-cards">
+              <div v-for="(c, index) in productForm.colors" :key="index" class="color-card">
+                <div class="color-card-header">
+                  <input
+                    v-model="c.color"
+                    type="text"
+                    class="color-name-input"
+                    placeholder="Color (e.g. Black)"
+                  />
+                  <span class="color-subtotal">Qty: {{ colorQty(c) }}</span>
+                  <button type="button" class="color-remove" title="Remove color" @click="removeColor(index)">&times;</button>
+                </div>
+
+                <div class="size-list">
+                  <div v-for="(s, si) in (c.sizes || [])" :key="si" class="size-row">
+                    <input
+                      v-model="s.size"
+                      type="text"
+                      class="size-name-input"
+                      placeholder="Size (e.g. 40)"
+                    />
+                    <input
+                      v-model.number="s.qty"
+                      type="number"
+                      min="0"
+                      step="1"
+                      class="size-qty-input"
+                      placeholder="QTY"
+                    />
+                    <button type="button" class="size-remove" title="Remove size" @click="removeSize(c, si)">&times;</button>
+                  </div>
+                  <button type="button" class="btn btn-secondary btn-sm add-size-btn" @click="addSize(c)">
+                    + Add Size
+                  </button>
+                </div>
+              </div>
+              <div class="color-total">Total QTY: <strong>{{ colorsTotalQty }}</strong></div>
+            </div>
+
+            <!-- Simple layout (bags etc.): color + quantity -->
+            <div v-else-if="productForm.colors.length" class="color-rows">
               <div v-for="(c, index) in productForm.colors" :key="index" class="color-row">
                 <input
                   v-model="c.color"
@@ -366,14 +440,23 @@ definePageMeta({
   middleware: 'auth'
 })
 
+interface ProductSize {
+  size: string
+  qty: number
+}
+
 interface ProductColor {
   color: string
   qty: number
+  // Per-size stock breakdown — used for sized categories (e.g. shoes).
+  // When present, the color's qty is the sum of its sizes.
+  sizes?: ProductSize[]
 }
 
 interface MellowProduct {
   id: number
   name: string
+  category: string | null
   qty: number | null
   colors: ProductColor[] | null
   price_buy_yuan: number | null
@@ -405,6 +488,7 @@ const imagePreview = ref('')
 // Form data
 const productForm = reactive({
   name: '',
+  category: 'bag',
   qty: 0,
   colors: [] as ProductColor[],
   price_buy_yuan: 0,
@@ -427,34 +511,68 @@ watch(
 )
 
 // ==============================================
-// Per-color quantity
-// A product can have one or many colors, each with its own QTY. When any
-// color rows exist, the top-level QTY is the sum of all color quantities
-// (the QTY field becomes read-only). With no color rows, QTY is entered
-// manually as before, so simple single-stock products still work.
+// Per-color quantity (with optional per-size breakdown)
+// A product can have one or many colors, each with its own QTY. For sized
+// categories (e.g. shoes) each color is broken down by size, and the color's
+// QTY is the sum of its sizes. When any color rows exist, the top-level QTY is
+// the sum of all colors (the QTY field becomes read-only). With no color rows,
+// QTY is entered manually so simple single-stock products still work.
 // ==============================================
+
+// Categories whose products are counted per size (color + size + qty).
+const sizedCategories = ['shoes']
+const formNeedsSizes = computed(() => sizedCategories.includes(productForm.category))
+
+// Effective quantity of a single color: sum of its sizes when sized, else qty.
+const colorQty = (c: ProductColor) => {
+  if (c.sizes && c.sizes.length) {
+    return c.sizes.reduce((sum, s) => sum + (Number(s.qty) || 0), 0)
+  }
+  return Number(c.qty) || 0
+}
+
 const colorsTotalQty = computed(() =>
-  productForm.colors.reduce((sum, c) => sum + (Number(c.qty) || 0), 0)
+  productForm.colors.reduce((sum, c) => sum + colorQty(c), 0)
 )
 
 // A color row only "counts" once it has a name or a quantity. Empty placeholder
 // rows are ignored, so they don't lock the manual QTY field.
 const meaningfulColors = computed(() =>
-  productForm.colors.filter(c => (c.color && c.color.trim() !== '') || (Number(c.qty) || 0) > 0)
+  productForm.colors.filter(c => (c.color && c.color.trim() !== '') || colorQty(c) > 0)
 )
 
 const hasColors = computed(() => meaningfulColors.value.length > 0)
 
+const addSize = (c: ProductColor) => {
+  if (!c.sizes) c.sizes = []
+  c.sizes.push({ size: '', qty: 0 })
+}
+
+const removeSize = (c: ProductColor, index: number) => {
+  c.sizes?.splice(index, 1)
+}
+
 const addColor = () => {
-  productForm.colors.push({ color: '', qty: 0 })
+  const row: ProductColor = { color: '', qty: 0 }
+  if (formNeedsSizes.value) row.sizes = [{ size: '', qty: 0 }]
+  productForm.colors.push(row)
 }
 
 const removeColor = (index: number) => {
   productForm.colors.splice(index, 1)
 }
 
+// When the form switches to a sized category, make sure every color has at
+// least one size row so the size fields are visible and editable right away.
+watch(formNeedsSizes, (needs) => {
+  if (!needs) return
+  productForm.colors.forEach(c => {
+    if (!c.sizes || c.sizes.length === 0) c.sizes = [{ size: '', qty: 0 }]
+  })
+})
+
 // Keep the top-level QTY in sync with the per-color breakdown whenever colors
-// are present. Editing color quantities then drives the displayed total.
+// are present. Editing color/size quantities then drives the displayed total.
 watch([colorsTotalQty, hasColors], ([total, has]) => {
   if (has) productForm.qty = total
 })
@@ -500,6 +618,89 @@ const convertYuanToUsd = () => {
 }
 
 // ==============================================
+// Categories (tab switcher)
+// Products are grouped by `category` (e.g. bag, shoes). The active tab filters
+// the list. New products default to the active category. Custom categories the
+// user adds are persisted to localStorage so they survive reloads, and any
+// category already present in the data is shown even if not in the base list.
+// ==============================================
+const baseCategories = [
+  { value: 'bag', label: 'Bag', icon: '👜' },
+  { value: 'shoes', label: 'Shoes', icon: '👟' }
+]
+
+const activeCategory = ref('bag')
+const customCategories = ref<string[]>([])
+
+// Title-case a raw category key for display, e.g. "hand-bag" -> "Hand-bag"
+const formatCategoryLabel = (value: string) =>
+  value.charAt(0).toUpperCase() + value.slice(1)
+
+// All category tabs with live product counts. Base categories always show
+// (even at 0); custom + data-derived categories are appended.
+const categoryTabs = computed(() => {
+  const counts: Record<string, number> = {}
+  for (const p of products.value) {
+    const key = p.category || 'bag'
+    counts[key] = (counts[key] || 0) + 1
+  }
+
+  const known = baseCategories.map(c => c.value)
+  const extraKeys = [
+    ...customCategories.value,
+    ...Object.keys(counts)
+  ].filter((k, i, arr) => !known.includes(k) && arr.indexOf(k) === i)
+
+  const extras = extraKeys.map(k => ({ value: k, label: formatCategoryLabel(k), icon: '🏷️' }))
+
+  return [...baseCategories, ...extras].map(c => ({ ...c, count: counts[c.value] || 0 }))
+})
+
+const activeCategoryLabel = computed(() => {
+  const tab = categoryTabs.value.find(c => c.value === activeCategory.value)
+  return tab ? tab.label : formatCategoryLabel(activeCategory.value)
+})
+
+const setActiveCategory = (value: string) => {
+  activeCategory.value = value
+  localStorage.setItem('mellowProductActiveCategory', value)
+}
+
+const addCategory = () => {
+  const raw = window.prompt('New category name (e.g. Shoes, Hat):')
+  if (!raw) return
+  const value = raw.trim().toLowerCase()
+  if (!value) return
+
+  const exists = categoryTabs.value.some(c => c.value === value)
+  if (!exists) {
+    customCategories.value.push(value)
+    localStorage.setItem('mellowProductCustomCategories', JSON.stringify(customCategories.value))
+  }
+  setActiveCategory(value)
+}
+
+const loadCategoryState = () => {
+  const savedActive = localStorage.getItem('mellowProductActiveCategory')
+  if (savedActive) activeCategory.value = savedActive
+
+  const savedCustom = localStorage.getItem('mellowProductCustomCategories')
+  if (savedCustom) {
+    try {
+      const parsed = JSON.parse(savedCustom)
+      if (Array.isArray(parsed)) customCategories.value = parsed.filter(c => typeof c === 'string')
+    } catch (e) {
+      console.warn('Failed to load custom categories:', e)
+    }
+  }
+}
+
+// Products in the currently selected category. Feeds the sort/paginate chain.
+const visibleProducts = computed(() =>
+  products.value.filter(p => (p.category || 'bag') === activeCategory.value)
+)
+
+// ==============================================
 // Column ordering (drag-and-drop) — required by rules.md
 // ==============================================
 const availableColumns = [
@@ -542,8 +743,8 @@ const toggleNameSort = () => {
 // original fetch order (id desc) is preserved. Numeric-aware compare so
 // B003 < B050 (and B2 < B10) order correctly.
 const sortedProducts = computed(() => {
-  if (!nameSortDir.value) return products.value
-  return [...products.value].sort((a, b) => {
+  if (!nameSortDir.value) return visibleProducts.value
+  return [...visibleProducts.value].sort((a, b) => {
     const cmp = (a.name || '').localeCompare(b.name || '', undefined, {
       numeric: true,
       sensitivity: 'base'
@@ -586,8 +787,8 @@ watch(totalPages, (max) => {
   if (currentPage.value > max) currentPage.value = max
 })
 
-// Resetting to the first page on sort/page-size change keeps the view predictable.
-watch([nameSortDir, pageSize], () => {
+// Resetting to the first page on sort/page-size/category change keeps the view predictable.
+watch([nameSortDir, pageSize, activeCategory], () => {
   currentPage.value = 1
 })
 
@@ -695,6 +896,7 @@ const fetchProducts = async () => {
 
 const resetForm = () => {
   productForm.name = ''
+  productForm.category = activeCategory.value
   productForm.qty = 0
   productForm.colors = []
   productForm.price_buy_yuan = 0
@@ -721,13 +923,27 @@ const openEditModal = (product: MellowProduct) => {
   isEditing.value = true
   productToEdit.value = product
   productForm.name = product.name
+  productForm.category = product.category || 'bag'
   productForm.qty = product.qty ?? 0
-  // Clone so editing the form doesn't mutate the table row before saving
+  // Clone so editing the form doesn't mutate the table row before saving.
+  // Preserve any per-size breakdown so sized products (shoes) round-trip.
   productForm.colors = Array.isArray(product.colors)
-    ? product.colors.map(c => ({ color: c.color ?? '', qty: Number(c.qty) || 0 }))
+    ? product.colors.map(c => {
+        const row: ProductColor = { color: c.color ?? '', qty: Number(c.qty) || 0 }
+        if (Array.isArray(c.sizes)) {
+          row.sizes = c.sizes.map(s => ({ size: String(s.size ?? ''), qty: Number(s.qty) || 0 }))
+        }
+        return row
+      })
     : []
   // Show a blank row so the color field is visible for products without colors yet
   if (productForm.colors.length === 0) addColor()
+  // For sized categories, make sure each color has at least one size row to edit
+  if (formNeedsSizes.value) {
+    productForm.colors.forEach(c => {
+      if (!c.sizes || c.sizes.length === 0) c.sizes = [{ size: '', qty: 0 }]
+    })
+  }
   productForm.price_buy_yuan = product.price_buy_yuan ?? 0
   productForm.price_buy_usd = product.price_buy_usd ?? 0
   productForm.price_delivery_usd = product.price_delivery_usd ?? 0
@@ -773,11 +989,28 @@ const saveProduct = async () => {
     // Drop blank color rows, then derive the total QTY from the breakdown when
     // colors are present (otherwise keep the manually entered QTY).
     const cleanColors = productForm.colors
-      .map(c => ({ color: c.color.trim(), qty: Number(c.qty) || 0 }))
-      .filter(c => c.color !== '' || c.qty > 0)
+      .map(c => {
+        const name = c.color.trim()
+        if (formNeedsSizes.value) {
+          // Sized category (shoes): keep the per-size breakdown; the color's
+          // qty is the sum of its sizes. Drop fully-empty size rows.
+          const sizes = (c.sizes || [])
+            .map(s => ({ size: String(s.size).trim(), qty: Number(s.qty) || 0 }))
+            .filter(s => s.size !== '' || s.qty > 0)
+          const qty = sizes.reduce((sum, s) => sum + s.qty, 0)
+          return { color: name, qty, sizes }
+        }
+        return { color: name, qty: Number(c.qty) || 0 }
+      })
+      .filter(c => c.color !== '' || c.qty > 0 || ((c as any).sizes?.length > 0))
 
     if (cleanColors.some(c => c.color === '')) {
       alert('Please enter a name for each color (or remove the empty rows)')
+      return
+    }
+
+    if (formNeedsSizes.value && cleanColors.some(c => (c as any).sizes?.some((s: ProductSize) => s.size === ''))) {
+      alert('Please enter a size label for each size row (or remove the empty rows)')
       return
     }
 
@@ -787,6 +1020,7 @@ const saveProduct = async () => {
 
     const payload = {
       name: productForm.name.trim(),
+      category: productForm.category || 'bag',
       qty: totalQty,
       colors: cleanColors,
       price_buy_yuan: productForm.price_buy_yuan || 0,
@@ -812,9 +1046,22 @@ const saveProduct = async () => {
 
     closeModal()
     await fetchProducts()
-  } catch (err) {
+  } catch (err: any) {
     console.error('Error saving product:', err)
-    alert('Failed to save product. Please try again.')
+    // Surface the real cause. A missing DB column (PostgREST PGRST204) usually
+    // means a pending migration hasn't been applied to Supabase yet.
+    const message = err?.message || ''
+    if (err?.code === 'PGRST204' || /could not find the .* column/i.test(message)) {
+      const col = message.match(/'([^']+)' column/)?.[1]
+      alert(
+        `Database is missing the "${col || 'required'}" column.\n\n` +
+        'Run the latest migrations in the Supabase SQL editor:\n' +
+        '• database/migrations/07-add-mellow-product-colors.sql\n' +
+        '• database/migrations/08-add-mellow-product-category.sql'
+      )
+    } else {
+      alert(`Failed to save product.\n\n${message || 'Please try again.'}`)
+    }
   } finally {
     saving.value = false
   }
@@ -861,7 +1108,20 @@ const formatYuan = (value: number | null) => {
   return `¥${Number(value || 0).toFixed(2)}`
 }
 
+// Table display for a color cell: per-size breakdown when present
+// (e.g. "40×2, 41×3"), otherwise just the color total qty.
+const formatColorCount = (c: ProductColor) => {
+  if (c.sizes && c.sizes.length) {
+    return c.sizes
+      .filter(s => s.size || s.qty)
+      .map(s => `${s.size || '?'}×${s.qty || 0}`)
+      .join(', ')
+  }
+  return String(c.qty ?? 0)
+}
+
 onMounted(() => {
+  loadCategoryState()
   loadColumnOrder()
   fetchProducts()
   fetchExchangeRate()
@@ -903,6 +1163,78 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+/* Category Tabs */
+.category-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 2px solid #e9ecef;
+  padding-bottom: 0.75rem;
+}
+
+.category-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 1.1rem;
+  border: 2px solid #dee2e6;
+  background: #fff;
+  border-radius: 999px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #5a6c7d;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.category-tab:hover { border-color: #3498db; color: #2c3e50; }
+
+.category-tab.active {
+  background: #3498db;
+  border-color: #3498db;
+  color: #fff;
+}
+
+.category-tab .cat-icon { font-size: 1.1rem; line-height: 1; }
+
+.category-tab .cat-count {
+  background: rgba(0, 0, 0, 0.08);
+  color: inherit;
+  border-radius: 999px;
+  padding: 0.05rem 0.5rem;
+  font-size: 0.8rem;
+  min-width: 1.5rem;
+  text-align: center;
+}
+
+.category-tab.active .cat-count { background: rgba(255, 255, 255, 0.25); }
+
+.add-category-tab {
+  color: #3498db;
+  border-style: dashed;
+}
+
+.add-category-tab:hover { background: #eef6fc; }
+
+.category-select {
+  width: 100%;
+  padding: 0.75rem;
+  border: 2px solid #dee2e6;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-family: inherit;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.3s ease;
+}
+
+.category-select:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
 }
 
 /* Loading State */
@@ -1342,6 +1674,98 @@ onMounted(() => {
 .add-color-btn {
   padding: 0.4rem 0.9rem;
   font-size: 0.9rem;
+}
+
+/* Sized layout (shoes): color card with per-size rows */
+.color-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.color-card {
+  border: 2px solid #e9ecef;
+  border-radius: 10px;
+  padding: 0.75rem;
+  background: #fbfcfd;
+}
+
+.color-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.color-card-header .color-name-input { flex: 1 1 auto; width: auto; min-width: 0; }
+
+.color-subtotal {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #2c3e50;
+  white-space: nowrap;
+}
+
+.color-card-header input[type="text"] {
+  padding: 0.5rem 0.6rem;
+  border: 2px solid #dee2e6;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-family: inherit;
+}
+
+.size-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding-left: 0.75rem;
+  border-left: 3px solid #e9ecef;
+}
+
+.size-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.size-row input.size-name-input { flex: 1 1 auto; width: auto; min-width: 0; }
+.size-row input.size-qty-input { flex: 0 0 5rem; width: 5rem; }
+
+.size-row input[type="text"],
+.size-row input[type="number"] {
+  padding: 0.4rem 0.55rem;
+  border: 2px solid #dee2e6;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-family: inherit;
+}
+
+.size-row input:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.size-remove {
+  border: none;
+  background: #f1f3f5;
+  color: #868e96;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.size-remove:hover { background: #e9ecef; color: #495057; }
+
+.add-size-btn {
+  align-self: flex-start;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.85rem;
 }
 
 /* Per-color tags (table) */
