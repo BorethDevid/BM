@@ -85,6 +85,18 @@
                   <!-- QTY -->
                   <span v-else-if="columnKey === 'qty'">{{ product.qty ?? 0 }}</span>
 
+                  <!-- Colors (QTY) -->
+                  <div v-else-if="columnKey === 'colors'" class="color-tags">
+                    <template v-if="product.colors && product.colors.length">
+                      <span
+                        v-for="(c, ci) in product.colors"
+                        :key="ci"
+                        class="color-tag"
+                      >{{ c.color }}: {{ c.qty }}</span>
+                    </template>
+                    <span v-else class="no-data">-</span>
+                  </div>
+
                   <!-- Price Buy ¥ -->
                   <span v-else-if="columnKey === 'priceBuyYuan'">{{ formatYuan(product.price_buy_yuan) }}</span>
 
@@ -187,13 +199,58 @@
 
           <div class="form-row">
             <div class="form-group">
-              <label for="qty">QTY</label>
-              <input id="qty" v-model.number="productForm.qty" type="number" min="0" step="1" placeholder="0" />
+              <label for="qty">
+                QTY
+                <span v-if="hasColors" class="hint">(auto = sum of colors)</span>
+              </label>
+              <input
+                id="qty"
+                v-model.number="productForm.qty"
+                type="number"
+                min="0"
+                step="1"
+                placeholder="0"
+                :readonly="hasColors"
+                :class="{ 'is-readonly': hasColors }"
+              />
             </div>
             <div class="form-group">
               <label for="typeShop">Type Shop</label>
               <input id="typeShop" v-model="productForm.type_shop" type="text" placeholder="e.g. Taobao, 1688" />
             </div>
+          </div>
+
+          <!-- Per-color quantity breakdown -->
+          <div class="form-group">
+            <label>
+              Colors &amp; Quantity
+              <span class="hint">(add a row per color for multi-color products)</span>
+            </label>
+
+            <div v-if="productForm.colors.length" class="color-rows">
+              <div v-for="(c, index) in productForm.colors" :key="index" class="color-row">
+                <input
+                  v-model="c.color"
+                  type="text"
+                  class="color-name-input"
+                  placeholder="Color (e.g. Red)"
+                />
+                <input
+                  v-model.number="c.qty"
+                  type="number"
+                  min="0"
+                  step="1"
+                  class="color-qty-input"
+                  placeholder="QTY"
+                />
+                <button type="button" class="color-remove" title="Remove color" @click="removeColor(index)">&times;</button>
+              </div>
+              <div class="color-total">Total QTY: <strong>{{ colorsTotalQty }}</strong></div>
+            </div>
+
+            <button type="button" class="btn btn-secondary btn-sm add-color-btn" @click="addColor">
+              + Add Color
+            </button>
           </div>
 
           <div class="form-row">
@@ -309,10 +366,16 @@ definePageMeta({
   middleware: 'auth'
 })
 
+interface ProductColor {
+  color: string
+  qty: number
+}
+
 interface MellowProduct {
   id: number
   name: string
   qty: number | null
+  colors: ProductColor[] | null
   price_buy_yuan: number | null
   price_buy_usd: number | null
   price_delivery_usd: number | null
@@ -343,6 +406,7 @@ const imagePreview = ref('')
 const productForm = reactive({
   name: '',
   qty: 0,
+  colors: [] as ProductColor[],
   price_buy_yuan: 0,
   price_buy_usd: 0,
   price_delivery_usd: 0,
@@ -361,6 +425,39 @@ watch(
     productForm.price_total_per_unit_usd = Number(((buy || 0) + (delivery || 0)).toFixed(2))
   }
 )
+
+// ==============================================
+// Per-color quantity
+// A product can have one or many colors, each with its own QTY. When any
+// color rows exist, the top-level QTY is the sum of all color quantities
+// (the QTY field becomes read-only). With no color rows, QTY is entered
+// manually as before, so simple single-stock products still work.
+// ==============================================
+const colorsTotalQty = computed(() =>
+  productForm.colors.reduce((sum, c) => sum + (Number(c.qty) || 0), 0)
+)
+
+// A color row only "counts" once it has a name or a quantity. Empty placeholder
+// rows are ignored, so they don't lock the manual QTY field.
+const meaningfulColors = computed(() =>
+  productForm.colors.filter(c => (c.color && c.color.trim() !== '') || (Number(c.qty) || 0) > 0)
+)
+
+const hasColors = computed(() => meaningfulColors.value.length > 0)
+
+const addColor = () => {
+  productForm.colors.push({ color: '', qty: 0 })
+}
+
+const removeColor = (index: number) => {
+  productForm.colors.splice(index, 1)
+}
+
+// Keep the top-level QTY in sync with the per-color breakdown whenever colors
+// are present. Editing color quantities then drives the displayed total.
+watch([colorsTotalQty, hasColors], ([total, has]) => {
+  if (has) productForm.qty = total
+})
 
 // ==============================================
 // Live CNY -> USD exchange rate
@@ -409,6 +506,7 @@ const availableColumns = [
   { key: 'index', label: '#' },
   { key: 'name', label: 'Name' },
   { key: 'qty', label: 'QTY' },
+  { key: 'colors', label: 'Colors (QTY)' },
   { key: 'priceBuyYuan', label: 'Price Buy ¥' },
   { key: 'priceBuyUsd', label: 'Price Buy $' },
   { key: 'priceDeliveryUsd', label: 'Price Delivery $' },
@@ -598,6 +696,7 @@ const fetchProducts = async () => {
 const resetForm = () => {
   productForm.name = ''
   productForm.qty = 0
+  productForm.colors = []
   productForm.price_buy_yuan = 0
   productForm.price_buy_usd = 0
   productForm.price_delivery_usd = 0
@@ -612,6 +711,9 @@ const openAddModal = () => {
   isEditing.value = false
   productToEdit.value = null
   resetForm()
+  // Show one blank color row so the color-name field is visible right away.
+  // It's ignored on save unless filled in.
+  addColor()
   showModal.value = true
 }
 
@@ -620,6 +722,12 @@ const openEditModal = (product: MellowProduct) => {
   productToEdit.value = product
   productForm.name = product.name
   productForm.qty = product.qty ?? 0
+  // Clone so editing the form doesn't mutate the table row before saving
+  productForm.colors = Array.isArray(product.colors)
+    ? product.colors.map(c => ({ color: c.color ?? '', qty: Number(c.qty) || 0 }))
+    : []
+  // Show a blank row so the color field is visible for products without colors yet
+  if (productForm.colors.length === 0) addColor()
   productForm.price_buy_yuan = product.price_buy_yuan ?? 0
   productForm.price_buy_usd = product.price_buy_usd ?? 0
   productForm.price_delivery_usd = product.price_delivery_usd ?? 0
@@ -662,9 +770,25 @@ const saveProduct = async () => {
       return
     }
 
+    // Drop blank color rows, then derive the total QTY from the breakdown when
+    // colors are present (otherwise keep the manually entered QTY).
+    const cleanColors = productForm.colors
+      .map(c => ({ color: c.color.trim(), qty: Number(c.qty) || 0 }))
+      .filter(c => c.color !== '' || c.qty > 0)
+
+    if (cleanColors.some(c => c.color === '')) {
+      alert('Please enter a name for each color (or remove the empty rows)')
+      return
+    }
+
+    const totalQty = cleanColors.length > 0
+      ? cleanColors.reduce((sum, c) => sum + c.qty, 0)
+      : (productForm.qty || 0)
+
     const payload = {
       name: productForm.name.trim(),
-      qty: productForm.qty || 0,
+      qty: totalQty,
+      colors: cleanColors,
       price_buy_yuan: productForm.price_buy_yuan || 0,
       price_buy_usd: productForm.price_buy_usd || 0,
       price_delivery_usd: productForm.price_delivery_usd || 0,
@@ -920,8 +1044,8 @@ onMounted(() => {
 .pic-cell { display: flex; align-items: center; }
 
 .pic-thumb {
-  width: 48px;
-  height: 48px;
+  width: 80px;
+  height: 80px;
   object-fit: cover;
   border-radius: 8px;
   border: 1px solid #dee2e6;
@@ -1144,6 +1268,99 @@ onMounted(() => {
 .form-group input[type="file"] {
   width: 100%;
   font-size: 0.9rem;
+}
+
+.form-group input.is-readonly {
+  background: #f1f3f5;
+  color: #6c757d;
+  cursor: not-allowed;
+}
+
+/* Per-color quantity editor (form) */
+.color-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.color-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Use input.<class> so these beat the page's global
+   `.form-group input[type="text"] { width: 100% }` rule, which would
+   otherwise squash the color name field to an unusable sliver. */
+.color-row input.color-name-input {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+
+.color-row input.color-qty-input {
+  flex: 0 0 5.5rem;
+  width: 5.5rem;
+}
+
+.color-row input[type="text"],
+.color-row input[type="number"] {
+  padding: 0.5rem 0.6rem;
+  border: 2px solid #dee2e6;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-family: inherit;
+}
+
+.color-row input:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.color-remove {
+  border: none;
+  background: #f8d7da;
+  color: #c82333;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.color-remove:hover { background: #f5c2c7; }
+
+.color-total {
+  font-size: 0.9rem;
+  color: #2c3e50;
+}
+
+.add-color-btn {
+  padding: 0.4rem 0.9rem;
+  font-size: 0.9rem;
+}
+
+/* Per-color tags (table) */
+.color-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  max-width: 240px;
+  white-space: normal;
+}
+
+.color-tag {
+  background: #eef2f7;
+  color: #2c3e50;
+  border: 1px solid #dde3ea;
+  border-radius: 12px;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
 }
 
 .form-group input:focus {
