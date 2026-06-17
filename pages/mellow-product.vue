@@ -705,6 +705,8 @@ const visibleProducts = computed(() =>
 // ==============================================
 const availableColumns = [
   { key: 'actions', label: 'Actions' },
+  { key: 'picCnShop', label: 'Pic CN Shop' },
+  { key: 'picBag', label: 'Pic Bag' },
   { key: 'index', label: '#' },
   { key: 'name', label: 'Name' },
   { key: 'qty', label: 'QTY' },
@@ -714,9 +716,7 @@ const availableColumns = [
   { key: 'priceDeliveryUsd', label: 'Price Delivery $' },
   { key: 'priceTotalPerUnit', label: 'Price Total / Unit $' },
   { key: 'priceSellUsd', label: 'Price Sell $' },
-  { key: 'typeShop', label: 'Type Shop' },
-  { key: 'picCnShop', label: 'Pic CN Shop' },
-  { key: 'picBag', label: 'Pic Bag' }
+  { key: 'typeShop', label: 'Type Shop' }
 ]
 
 const columnOrder = ref(availableColumns.map(c => c.key))
