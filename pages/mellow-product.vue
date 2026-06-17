@@ -131,6 +131,13 @@
                   <!-- Price Sell $ -->
                   <span v-else-if="columnKey === 'priceSellUsd'">{{ formatUsd(product.price_sell_usd) }}</span>
 
+                  <!-- Profit $ = Price Sell $ − Price Total / Unit $ -->
+                  <span
+                    v-else-if="columnKey === 'profit'"
+                    class="profit-value"
+                    :class="{ 'profit-negative': productProfit(product) < 0 }"
+                  >{{ formatUsd(productProfit(product)) }}</span>
+
                   <!-- Type Shop -->
                   <span v-else-if="columnKey === 'typeShop'">{{ product.type_shop || '-' }}</span>
 
@@ -141,6 +148,8 @@
                       :src="product.pic_cn_shop"
                       alt="CN Shop"
                       class="pic-thumb"
+                      loading="lazy"
+                      decoding="async"
                       @click="openImagePreview(product.pic_cn_shop)"
                     />
                     <span v-else class="no-data">-</span>
@@ -153,6 +162,8 @@
                       :src="product.pic_bag"
                       alt="Bag"
                       class="pic-thumb"
+                      loading="lazy"
+                      decoding="async"
                       @click="openImagePreview(product.pic_bag)"
                     />
                     <span v-else class="no-data">-</span>
@@ -716,6 +727,7 @@ const availableColumns = [
   { key: 'priceDeliveryUsd', label: 'Price Delivery $' },
   { key: 'priceTotalPerUnit', label: 'Price Total / Unit $' },
   { key: 'priceSellUsd', label: 'Price Sell $' },
+  { key: 'profit', label: 'Profit $' },
   { key: 'typeShop', label: 'Type Shop' }
 ]
 
@@ -791,6 +803,44 @@ watch(totalPages, (max) => {
 watch([nameSortDir, pageSize, activeCategory], () => {
   currentPage.value = 1
 })
+
+// ==============================================
+// Lazy image loading
+// The list query omits the large base64 image columns. Here we fetch the
+// images only for the rows currently on screen, so paging is fast and the
+// initial load stays small. Loaded ids are tracked so we never refetch.
+// ==============================================
+const loadedImageIds = ref(new Set<number>())
+
+const fetchImagesForIds = async (ids: number[]) => {
+  const missing = ids.filter(id => !loadedImageIds.value.has(id))
+  if (missing.length === 0) return
+  // Mark as loaded up front so concurrent page changes don't double-fetch.
+  missing.forEach(id => loadedImageIds.value.add(id))
+  try {
+    const { from } = useSupabaseDB()
+    const { data, error: imgError } = await from('mellow_products')
+      .select('id, pic_cn_shop, pic_bag')
+      .in('id', missing)
+    if (imgError) throw imgError
+    for (const row of (data as unknown as Array<{ id: number, pic_cn_shop: string | null, pic_bag: string | null }>) || []) {
+      const prod = products.value.find(p => p.id === row.id)
+      if (prod) {
+        prod.pic_cn_shop = row.pic_cn_shop ?? null
+        prod.pic_bag = row.pic_bag ?? null
+      }
+    }
+  } catch (err) {
+    console.error('Error loading product images:', err)
+    // Allow a retry on the next trigger if the fetch failed.
+    missing.forEach(id => loadedImageIds.value.delete(id))
+  }
+}
+
+// Load thumbnails whenever the visible page changes (fetch, sort, paging, filter).
+watch(paginatedProducts, (rows) => {
+  fetchImagesForIds(rows.map(p => p.id))
+}, { immediate: true })
 
 const getColumnLabel = (columnKey: string) => {
   const column = availableColumns.find(col => col.key === columnKey)
@@ -879,12 +929,16 @@ const fetchProducts = async () => {
     error.value = null
 
     const { from } = useSupabaseDB()
+    // Skip the heavy base64 image columns (pic_cn_shop, pic_bag) here — they make
+    // the payload huge. Thumbnails are loaded lazily per visible page instead.
     const { data, error: fetchError } = await from('mellow_products')
-      .select('*')
+      .select('id, name, category, qty, colors, price_buy_yuan, price_buy_usd, price_delivery_usd, price_total_per_unit_usd, price_sell_usd, type_shop, created_at')
       .order('id', { ascending: false })
 
     if (fetchError) throw fetchError
 
+    // Reset the lazy-image cache so freshly fetched rows reload their thumbnails.
+    loadedImageIds.value = new Set()
     products.value = (data as unknown as MellowProduct[]) || []
   } catch (err) {
     console.error('Error fetching products:', err)
@@ -919,9 +973,12 @@ const openAddModal = () => {
   showModal.value = true
 }
 
-const openEditModal = (product: MellowProduct) => {
+const openEditModal = async (product: MellowProduct) => {
   isEditing.value = true
   productToEdit.value = product
+  // Images are lazy-loaded; make sure this product's images are present before
+  // populating the form, otherwise saving would overwrite them with blanks.
+  await fetchImagesForIds([product.id])
   productForm.name = product.name
   productForm.category = product.category || 'bag'
   productForm.qty = product.qty ?? 0
@@ -1107,6 +1164,10 @@ const formatUsd = (value: number | null) => {
 const formatYuan = (value: number | null) => {
   return `¥${Number(value || 0).toFixed(2)}`
 }
+
+// Profit per unit = Price Sell $ − Price Total / Unit $
+const productProfit = (product: MellowProduct) =>
+  Number(product.price_sell_usd || 0) - Number(product.price_total_per_unit_usd || 0)
 
 // Table display for a color cell: per-size breakdown when present
 // (e.g. "40×2, 41×3"), otherwise just the color total qty.
@@ -1319,6 +1380,8 @@ onMounted(() => {
 
 .product-name { font-weight: 600; color: #2c3e50; }
 .no-data { color: #adb5bd; }
+.profit-value { font-weight: 600; color: #1e7e34; }
+.profit-value.profit-negative { color: #dc3545; }
 
 /* Drag and drop headers */
 .draggable-header {
