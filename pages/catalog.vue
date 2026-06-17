@@ -200,7 +200,7 @@ const filteredProducts = computed(() => {
 })
 
 // ---- Pagination ----
-const pageSize = 24
+const pageSize = 100
 const currentPage = ref(1)
 const totalPages = computed(() => Math.max(1, Math.ceil(filteredProducts.value.length / pageSize)))
 const paginatedProducts = computed(() => {
@@ -436,7 +436,59 @@ onMounted(fetchProducts)
 }
 
 @media (max-width: 600px) {
+  .catalog { padding: 1rem 0.75rem 3rem; }
+
   .toolbar { flex-direction: column; align-items: stretch; }
   .search-input { max-width: none; }
+
+  /* Turn the table into a responsive card grid so nothing is cut off. */
+  .table-wrap {
+    background: transparent;
+    box-shadow: none;
+    border-radius: 0;
+    overflow: visible;
+  }
+
+  .catalog-table thead { display: none; }
+
+  .catalog-table,
+  .catalog-table tbody,
+  .catalog-table tr,
+  .catalog-table td { display: block; }
+
+  .catalog-table tbody {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 0.75rem;
+  }
+
+  .catalog-table tr {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+  }
+
+  .catalog-table td { padding: 0; border: none; }
+  .catalog-table tbody tr:hover { background: #fff; }
+
+  .col-index { display: none; }
+
+  .col-pic { width: 100%; }
+
+  .pic-thumb,
+  .col-pic .no-data {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1 / 1;
+    border: none;
+    border-radius: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .col-name { padding: 0.6rem 0.75rem 0; }
+  .col-price { width: auto; padding: 0.25rem 0.75rem 0.75rem; }
 }
 </style>
