@@ -143,13 +143,17 @@
           <table class="expenses-table">
             <thead>
               <tr>
-                <th>ID</th>
+                <th class="sortable" @click="toggleIdSort" title="Sort by ID">
+                  ID
+                  <span class="sort-indicator">{{ idSortOrder === 'asc' ? '▲' : '▼' }}</span>
+                </th>
                 <th>Date</th>
                 <th>Category</th>
                 <th>Description</th>
-                <th>Supplier</th>
                 <th>Product</th>
                 <th>Quantity</th>
+                <th>Total Cost $</th>
+                <th>Delivery $</th>
                 <th>Unit Cost</th>
                 <th>Total Amount</th>
                 <th>Payment Status</th>
@@ -168,9 +172,10 @@
                   </span>
                 </td>
                 <td class="description-cell">{{ expense.description }}</td>
-                <td>{{ expense.supplier_name || '-' }}</td>
                 <td>{{ expense.product_name || '-' }}</td>
                 <td>{{ expense.quantity || '-' }}</td>
+                <td>${{ (expense.total_amount - (expense.delivery_cost || 0)).toFixed(2) }}</td>
+                <td>${{ (expense.delivery_cost || 0).toFixed(2) }}</td>
                 <td>${{ expense.unit_cost.toFixed(2) }}</td>
                 <td class="amount-cell">${{ expense.total_amount.toFixed(2) }}</td>
                 <td>
@@ -285,21 +290,48 @@
           <!-- Product Selection (optional) -->
           <div class="form-section">
             <h3>Product Information (Optional)</h3>
-            <p class="form-help">Link this expense to a product for inventory tracking</p>
+            <p class="form-help">Link this expense to a Mellow product — selecting one fills in the ¥ / $ unit cost and delivery price</p>
 
             <div class="form-row">
               <div class="form-group">
-                <label for="productSelect">Product</label>
-                <select
-                  id="productSelect"
-                  v-model="expenseForm.product_id"
-                  @change="onProductSelect"
-                >
-                  <option value="">No product (general expense)</option>
-                  <option v-for="product in products" :key="product.id" :value="product.id">
-                    {{ product.name }} (Stock: {{ product.stock_quantity }})
-                  </option>
-                </select>
+                <label for="productSearch">Product</label>
+                <div class="combobox">
+                  <input
+                    id="productSearch"
+                    v-model="productSearch"
+                    type="text"
+                    autocomplete="off"
+                    placeholder="Search product…"
+                    @focus="showProductDropdown = true"
+                    @input="showProductDropdown = true"
+                    @blur="closeProductDropdownSoon"
+                  />
+                  <button
+                    v-if="expenseForm.product_id"
+                    type="button"
+                    class="combobox-clear"
+                    title="Clear"
+                    @click="clearProduct"
+                  >&times;</button>
+                  <ul v-if="showProductDropdown" class="combobox-list">
+                    <li class="combobox-item muted" @mousedown.prevent="clearProduct">
+                      No product (general expense)
+                    </li>
+                    <li
+                      v-for="product in filteredProducts"
+                      :key="product.id"
+                      class="combobox-item"
+                      :class="{ active: String(product.id) === expenseForm.product_id }"
+                      @mousedown.prevent="selectProduct(product)"
+                    >
+                      <span>{{ product.name }}</span>
+                      <span class="combobox-stock">Stock: {{ product.qty ?? 0 }}</span>
+                    </li>
+                    <li v-if="filteredProducts.length === 0" class="combobox-item muted">
+                      No products found
+                    </li>
+                  </ul>
+                </div>
               </div>
 
               <div class="form-group">
@@ -311,6 +343,7 @@
                   min="1"
                   placeholder="Quantity purchased"
                   :disabled="!expenseForm.product_id"
+                  @input="calculateTotal"
                 />
               </div>
             </div>
@@ -318,21 +351,67 @@
 
           <div class="form-row">
             <div class="form-group">
-              <label for="unitCost">Unit Cost *</label>
+              <label for="totalCostYuan">Total Cost ¥</label>
               <input
-                id="unitCost"
-                v-model.number="expenseForm.unit_cost"
+                id="totalCostYuan"
+                v-model.number="expenseForm.total_cost_yuan"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                @input="convertYuanToUsd"
+              />
+            </div>
+
+            <div class="form-group">
+              <label for="totalCostUsd">
+                Total Cost $
+                <span class="hint">(auto from ¥ × live rate)</span>
+              </label>
+              <input
+                id="totalCostUsd"
+                v-model.number="expenseForm.total_cost_usd"
                 type="number"
                 step="0.01"
                 min="0"
                 placeholder="0.00"
                 @input="calculateTotal"
-                required
+              />
+            </div>
+          </div>
+
+          <div class="rate-banner">
+            <span v-if="rateLoading">Loading live exchange rate…</span>
+            <template v-else-if="cnyToUsdRate">
+              <span class="rate-value">Live rate: ¥1 = ${{ cnyToUsdRate.toFixed(4) }}</span>
+              <button type="button" class="rate-refresh" :disabled="rateLoading" @click="fetchExchangeRate" title="Refresh rate">↻</button>
+              <span v-if="rateUpdatedAt" class="rate-updated">{{ rateUpdatedAt }}</span>
+            </template>
+            <span v-else class="rate-error">
+              {{ rateError || 'Rate unavailable' }}
+              <button type="button" class="rate-refresh" :disabled="rateLoading" @click="fetchExchangeRate" title="Retry">↻</button>
+            </span>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="deliveryCost">Delivery Price $</label>
+              <input
+                id="deliveryCost"
+                v-model.number="expenseForm.delivery_cost"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                @input="calculateTotal"
               />
             </div>
 
             <div class="form-group">
-              <label for="totalAmount">Total Amount *</label>
+              <label for="totalAmount">
+                Total Amount *
+                <span class="hint">(auto = Total Cost $ + Delivery)</span>
+              </label>
               <input
                 id="totalAmount"
                 v-model.number="expenseForm.total_amount"
@@ -345,6 +424,24 @@
                 readonly
               />
             </div>
+          </div>
+
+          <div class="form-group">
+            <label for="unitCost">
+              Unit Cost $ *
+              <span class="hint">(auto = Total Amount ÷ Qty)</span>
+            </label>
+            <input
+              id="unitCost"
+              v-model.number="expenseForm.unit_cost"
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="0.00"
+              class="readonly-input"
+              readonly
+              required
+            />
           </div>
 
           <div class="form-row">
@@ -436,7 +533,9 @@ interface Expense {
   product_id?: number
   product_name?: string
   quantity?: number
+  total_cost_yuan?: number
   unit_cost: number
+  delivery_cost?: number
   total_amount: number
   supplier_name?: string
   supplier_contact?: string
@@ -459,7 +558,15 @@ interface ExpenseCategory {
 // Reactive data
 const expenses = ref<Expense[]>([])
 const categories = ref<ExpenseCategory[]>([])
-const products = ref<Array<{id: number, name: string, price: number, stock_quantity: number}>>([])
+// Sourced from the mellow_products table (see fetchProducts)
+const products = ref<Array<{
+  id: number
+  name: string
+  qty: number | null
+  price_buy_yuan: number | null
+  price_buy_usd: number | null
+  price_delivery_usd: number | null
+}>>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
 const saving = ref(false)
@@ -484,6 +591,9 @@ const filters = ref({
 // Table width state
 const isTableExpanded = ref(false)
 
+// Sort state
+const idSortOrder = ref<'asc' | 'desc'>('desc')
+
 // Form data
 const expenseForm = reactive({
   expense_date: getCurrentDate(),
@@ -492,7 +602,10 @@ const expenseForm = reactive({
   product_id: '',
   product_name: '',
   quantity: 1,
+  total_cost_yuan: 0,
+  total_cost_usd: 0,
   unit_cost: 0,
+  delivery_cost: 0,
   total_amount: 0,
   supplier_name: '',
   supplier_contact: '',
@@ -501,6 +614,35 @@ const expenseForm = reactive({
   receipt_number: '',
   notes: ''
 })
+
+// Searchable product picker state
+const productSearch = ref('')
+const showProductDropdown = ref(false)
+
+const filteredProducts = computed(() => {
+  const q = productSearch.value.trim().toLowerCase()
+  if (!q) return products.value
+  return products.value.filter(p => p.name.toLowerCase().includes(q))
+})
+
+const selectProduct = (product: typeof products.value[number]) => {
+  expenseForm.product_id = String(product.id)
+  productSearch.value = product.name
+  showProductDropdown.value = false
+  onProductSelect()
+}
+
+const clearProduct = () => {
+  expenseForm.product_id = ''
+  productSearch.value = ''
+  showProductDropdown.value = false
+  onProductSelect()
+}
+
+const closeProductDropdownSoon = () => {
+  // Delay so a click on an option registers before the list closes.
+  setTimeout(() => { showProductDropdown.value = false }, 150)
+}
 
 // Fetch expenses
 const fetchExpenses = async () => {
@@ -540,32 +682,35 @@ const fetchCategories = async () => {
   }
 }
 
-// Fetch products
+// Fetch products from the mellow_products catalog
 const fetchProducts = async () => {
   try {
     const { select } = useSupabaseDB()
-    const { data, error: fetchError } = await select('products')
+    const { data, error: fetchError } = await select('mellow_products')
 
     if (fetchError) {
-      console.error('Error fetching products:', fetchError)
+      console.error('Error fetching mellow products:', fetchError)
       return
     }
 
-    products.value = (data as unknown as Array<{id: number, name: string, price: number, stock_quantity: number}>) || []
+    products.value = (data as unknown as typeof products.value) || []
   } catch (err) {
-    console.error('Error fetching products:', err)
+    console.error('Error fetching mellow products:', err)
   }
 }
 
-// Product selection handler
+// Product selection handler — prefill the total cost (mellow per-unit price × qty)
 const onProductSelect = () => {
   if (expenseForm.product_id) {
     const product = products.value.find(p => p.id === parseInt(expenseForm.product_id))
     if (product) {
+      const qty = expenseForm.quantity || 1
       expenseForm.product_name = product.name
-      if (!expenseForm.unit_cost) {
-        expenseForm.unit_cost = product.price
-      }
+      expenseForm.total_cost_yuan = Number(((product.price_buy_yuan || 0) * qty).toFixed(2))
+      expenseForm.total_cost_usd = Number(((product.price_buy_usd || 0) * qty).toFixed(2))
+      expenseForm.delivery_cost = Number(((product.price_delivery_usd || 0) * qty).toFixed(2))
+      // Refresh $ from ¥ at the live rate when available, then derive unit cost.
+      convertYuanToUsd()
       calculateTotal()
     }
   } else {
@@ -574,10 +719,55 @@ const onProductSelect = () => {
   }
 }
 
-// Calculate total amount
+// Calculate total amount = unit cost × quantity + delivery price
 const calculateTotal = () => {
   const quantity = expenseForm.quantity || 1
-  expenseForm.total_amount = expenseForm.unit_cost * quantity
+  const delivery = expenseForm.delivery_cost || 0
+  const totalCost = expenseForm.total_cost_usd || 0
+  // Overall expense = goods total cost + delivery.
+  expenseForm.total_amount = Number((totalCost + delivery).toFixed(2))
+  // Landed unit cost = total amount (incl. delivery) / quantity.
+  expenseForm.unit_cost = Number((expenseForm.total_amount / quantity).toFixed(2))
+}
+
+// ==============================================
+// Live CNY -> USD exchange rate (same as mellow page).
+// Fetched on mount and on manual refresh; converts the ¥ unit cost
+// the user types into the $ unit cost field.
+// ==============================================
+const cnyToUsdRate = ref<number | null>(null)
+const rateLoading = ref(false)
+const rateUpdatedAt = ref('')
+const rateError = ref<string | null>(null)
+
+const fetchExchangeRate = async () => {
+  try {
+    rateLoading.value = true
+    rateError.value = null
+    const data = await $fetch<any>('https://open.er-api.com/v6/latest/CNY')
+    const usd = data?.rates?.USD
+    if (typeof usd === 'number' && usd > 0) {
+      cnyToUsdRate.value = usd
+      rateUpdatedAt.value = data?.time_last_update_utc || ''
+      // Keep the converted $ in sync if a ¥ value is already entered.
+      convertYuanToUsd()
+    } else {
+      throw new Error('USD rate missing in response')
+    }
+  } catch (err) {
+    console.error('Error fetching exchange rate:', err)
+    rateError.value = 'Could not load live rate'
+  } finally {
+    rateLoading.value = false
+  }
+}
+
+// Recompute Total Cost $ from Total Cost ¥ using the live rate, then derive unit cost.
+const convertYuanToUsd = () => {
+  if (cnyToUsdRate.value == null) return
+  const yuan = expenseForm.total_cost_yuan || 0
+  expenseForm.total_cost_usd = Number((yuan * cnyToUsdRate.value).toFixed(2))
+  calculateTotal()
 }
 
 // Get current date
@@ -620,7 +810,10 @@ const openAddModal = () => {
     product_id: '',
     product_name: '',
     quantity: 1,
+    total_cost_yuan: 0,
+    total_cost_usd: 0,
     unit_cost: 0,
+    delivery_cost: 0,
     total_amount: 0,
     supplier_name: '',
     supplier_contact: '',
@@ -629,6 +822,8 @@ const openAddModal = () => {
     receipt_number: '',
     notes: ''
   })
+  productSearch.value = ''
+  showProductDropdown.value = false
   showModal.value = true
 }
 
@@ -643,7 +838,10 @@ const openEditModal = (expense: Expense) => {
     product_id: expense.product_id?.toString() || '',
     product_name: expense.product_name || '',
     quantity: expense.quantity || 1,
+    total_cost_yuan: expense.total_cost_yuan || 0,
+    total_cost_usd: Number((expense.total_amount - (expense.delivery_cost || 0)).toFixed(2)),
     unit_cost: expense.unit_cost,
+    delivery_cost: expense.delivery_cost || 0,
     total_amount: expense.total_amount,
     supplier_name: expense.supplier_name || '',
     supplier_contact: expense.supplier_contact || '',
@@ -652,6 +850,8 @@ const openEditModal = (expense: Expense) => {
     receipt_number: expense.receipt_number || '',
     notes: expense.notes || ''
   })
+  productSearch.value = expense.product_name || ''
+  showProductDropdown.value = false
   showModal.value = true
 }
 
@@ -671,7 +871,9 @@ const saveExpense = async () => {
       expense_date: expenseForm.expense_date,
       category: expenseForm.category.trim(),
       description: expenseForm.description.trim(),
+      total_cost_yuan: expenseForm.total_cost_yuan || 0,
       unit_cost: expenseForm.unit_cost,
+      delivery_cost: expenseForm.delivery_cost || 0,
       total_amount: expenseForm.total_amount,
       payment_status: expenseForm.payment_status
     }
@@ -763,6 +965,11 @@ const applyFilters = () => {
   // Filters are applied automatically via computed property
 }
 
+// Toggle ID sort order
+const toggleIdSort = () => {
+  idSortOrder.value = idSortOrder.value === 'asc' ? 'desc' : 'asc'
+}
+
 // Toggle table width
 const toggleTableWidth = () => {
   isTableExpanded.value = !isTableExpanded.value
@@ -825,7 +1032,9 @@ const filteredExpenses = computed(() => {
     filtered = filtered.filter(expense => expense.payment_status === filters.value.paymentStatus)
   }
 
-  return filtered.sort((a, b) => new Date(b.expense_date).getTime() - new Date(a.expense_date).getTime())
+  return filtered.sort((a, b) =>
+    idSortOrder.value === 'asc' ? a.id - b.id : b.id - a.id
+  )
 })
 
 // Fetch data on mount
@@ -834,7 +1043,8 @@ onMounted(async () => {
   await Promise.all([
     fetchExpenses(),
     fetchCategories(),
-    fetchProducts()
+    fetchProducts(),
+    fetchExchangeRate()
   ])
 })
 </script>
@@ -1055,6 +1265,21 @@ onMounted(async () => {
 
 .expenses-table tr:hover {
   background: #f8f9fa;
+}
+
+.expenses-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.expenses-table th.sortable:hover {
+  background: #eceff1;
+}
+
+.sort-indicator {
+  margin-left: 0.25rem;
+  font-size: 0.75rem;
+  color: #6c757d;
 }
 
 /* Sticky Column */
@@ -1313,6 +1538,120 @@ onMounted(async () => {
   background-color: #f9fafb;
   color: #6b7280;
   cursor: not-allowed;
+}
+
+.form-group label .hint {
+  font-weight: 400;
+  font-size: 0.8rem;
+  color: #7f8c8d;
+}
+
+.rate-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin: -0.75rem 0 1.5rem;
+  font-size: 0.85rem;
+  color: #5a6c7d;
+}
+
+.rate-banner .rate-value {
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.rate-banner .rate-updated {
+  font-size: 0.75rem;
+  color: #95a5a6;
+}
+
+.rate-banner .rate-error {
+  color: #c0392b;
+}
+
+.rate-refresh {
+  border: 1px solid #dee2e6;
+  background: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 0.1rem 0.45rem;
+  font-size: 0.9rem;
+  line-height: 1;
+  color: #2c3e50;
+}
+
+.rate-refresh:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Searchable product combobox */
+.combobox {
+  position: relative;
+}
+
+.combobox-clear {
+  position: absolute;
+  right: 0.6rem;
+  top: 0.75rem;
+  border: none;
+  background: none;
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  color: #7f8c8d;
+}
+
+.combobox-clear:hover {
+  color: #e74c3c;
+}
+
+.combobox-list {
+  position: absolute;
+  z-index: 20;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin: 0.25rem 0 0;
+  padding: 0.25rem 0;
+  list-style: none;
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.combobox-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  font-size: 0.95rem;
+  color: #2c3e50;
+}
+
+.combobox-item:hover {
+  background: #f1f5f9;
+}
+
+.combobox-item.active {
+  background: #e8f4fd;
+  font-weight: 600;
+}
+
+.combobox-item.muted {
+  color: #94a3b8;
+}
+
+.combobox-stock {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  white-space: nowrap;
 }
 
 /* Expense-specific styles */
