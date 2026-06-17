@@ -19,8 +19,9 @@ const showNavigation = computed(() => {
     return false // Never show navigation on server side
   }
   
-  // On client side, check authentication and route
-  return isAuthenticated.value && route.path !== '/login'
+  // On client side, check authentication and route.
+  // /catalog is a public, view-only page that should never show the nav.
+  return isAuthenticated.value && route.path !== '/login' && route.path !== '/catalog'
 })
 </script>
 
