@@ -704,6 +704,7 @@ const visibleProducts = computed(() =>
 // Column ordering (drag-and-drop) — required by rules.md
 // ==============================================
 const availableColumns = [
+  { key: 'actions', label: 'Actions' },
   { key: 'index', label: '#' },
   { key: 'name', label: 'Name' },
   { key: 'qty', label: 'QTY' },
@@ -715,8 +716,7 @@ const availableColumns = [
   { key: 'priceSellUsd', label: 'Price Sell $' },
   { key: 'typeShop', label: 'Type Shop' },
   { key: 'picCnShop', label: 'Pic CN Shop' },
-  { key: 'picBag', label: 'Pic Bag' },
-  { key: 'actions', label: 'Actions' }
+  { key: 'picBag', label: 'Pic Bag' }
 ]
 
 const columnOrder = ref(availableColumns.map(c => c.key))
