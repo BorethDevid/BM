@@ -153,6 +153,8 @@
                 <th>Unit Cost</th>
                 <th>Total Amount</th>
                 <th>Payment Status</th>
+                <th>Invoice #</th>
+                <th>Notes</th>
                 <th class="sticky-column">Actions</th>
               </tr>
             </thead>
@@ -183,6 +185,8 @@
                     {{ expense.payment_status }}
                   </span>
                 </td>
+                <td>{{ expense.receipt_number || '-' }}</td>
+                <td class="notes-cell" :title="expense.notes || ''">{{ expense.notes || '-' }}</td>
                 <td class="sticky-column">
                   <div class="action-buttons">
                     <button class="btn btn-sm btn-edit" @click="openEditModal(expense)" title="Edit">
@@ -1363,7 +1367,8 @@ onMounted(async () => {
   display: inline-block;
 }
 
-.description-cell {
+.description-cell,
+.notes-cell {
   max-width: 200px;
   white-space: nowrap;
   overflow: hidden;
