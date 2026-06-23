@@ -258,6 +258,7 @@
                     <div v-if="order.items && order.items.length > 0" class="multi-products">
                       <div v-for="(item, index) in order.items" :key="index" class="product-item-display">
                         <span class="product-name">{{ item.product_name }}</span>
+                        <span v-if="item.color" class="product-color">· {{ item.color }}</span>
                         <span class="product-quantity">({{ item.quantity }})</span>
                       </div>
                     </div>
@@ -446,7 +447,34 @@
                     />
                   </div>
                 </div>
-                
+
+                <!-- Color picker: only shown when the selected product has a
+                     per-color breakdown in the Mellow Products catalog. -->
+                <div v-if="getItemColors(index).length > 0" class="form-row">
+                  <div class="form-group">
+                    <label :for="`color_${index}`">Color</label>
+                    <el-select
+                      :id="`color_${index}`"
+                      v-model="item.color"
+                      placeholder="Select a color"
+                      filterable
+                      clearable
+                      style="width: 100%"
+                    >
+                      <el-option
+                        v-for="c in getItemColors(index)"
+                        :key="c.color"
+                        :label="`${c.color} (Qty: ${c.qty})`"
+                        :value="c.color"
+                      />
+                    </el-select>
+                  </div>
+
+                  <div class="form-group">
+                    <!-- Empty div for layout balance -->
+                  </div>
+                </div>
+
                 <div class="form-row">
                   <div class="form-group">
                     <label :for="`unitPrice_${index}`">Unit Price *</label>
@@ -653,6 +681,7 @@ interface OrderItem {
   order_id: number
   product_id: number
   product_name: string
+  color?: string
   quantity: number
   unit_price: number
   total_price: number
@@ -675,7 +704,7 @@ interface Channel {
 
 // Reactive data
 const orders = ref<Order[]>([])
-const products = ref<Array<{id: number, name: string, price: number, stock_quantity: number}>>([])
+const products = ref<Array<{id: number, name: string, price: number, stock_quantity: number, colors: Array<{color: string, qty: number}>}>>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
 const saving = ref(false)
@@ -796,6 +825,7 @@ const orderForm = reactive({
     id?: number
     product_id: string | number
     product_name: string
+    color: string
     quantity: number
     unit_price: number
     total_price: number
@@ -846,18 +876,31 @@ const cambodiaProvinces = ref([
   { name: "Preah Sihanouk", type: "Province", description: "Coastal province with major port" }
 ])
 
-// Fetch products from Supabase
+// Fetch products from the Mellow Products catalog.
+// Mellow products use different column names than the form expects, so we map
+// price_sell_usd -> price and qty -> stock_quantity to keep the rest of the
+// order form (product select, auto-fill, totals) working unchanged.
 const fetchProducts = async () => {
   try {
     const { select } = useSupabaseDB()
-    const { data, error: fetchError } = await select('products')
-    
+    const { data, error: fetchError } = await select('mellow_products', 'id, name, price_sell_usd, qty, colors')
+
     if (fetchError) {
       console.error('Error fetching products:', fetchError)
       return
     }
-    
-    products.value = (data as unknown as Array<{id: number, name: string, price: number, stock_quantity: number}>) || []
+
+    const rows = (data as unknown as Array<{id: number, name: string, price_sell_usd: number | null, qty: number | null, colors: Array<{color: string, qty: number}> | null}>) || []
+    products.value = rows.map(row => ({
+      id: row.id,
+      name: row.name,
+      price: Number(row.price_sell_usd) || 0,
+      stock_quantity: Number(row.qty) || 0,
+      // Per-color breakdown so the order form can offer a color picker per item.
+      colors: Array.isArray(row.colors)
+        ? row.colors.map(c => ({ color: String(c.color ?? ''), qty: Number(c.qty) || 0 }))
+        : []
+    }))
   } catch (err) {
     console.error('Error fetching products:', err)
   }
@@ -905,6 +948,7 @@ const fetchOrders = async () => {
               order_id: detail.order_id,
               product_id: detail.product_id,
               product_name: detail.product_name,
+              color: detail.color,
               quantity: detail.quantity,
               unit_price: detail.unit_price,
               total_price: detail.total_price
@@ -975,8 +1019,21 @@ const onProductSelectChange = (index: number) => {
   if (selectedProduct) {
     item.product_name = selectedProduct.name
     item.unit_price = selectedProduct.price
+    // Colors differ per product, so clear any previously chosen color. If the
+    // new product has exactly one color, preselect it for convenience.
+    const colors = selectedProduct.colors || []
+    item.color = colors.length === 1 ? colors[0].color : ''
     updateItemTotal(index)
   }
+}
+
+// Colors available for the product currently selected in a given order item.
+// Returns [] when nothing is selected or the product has no color breakdown.
+const getItemColors = (index: number) => {
+  const item = orderForm.items[index]
+  if (!item || !item.product_id) return []
+  const selectedProduct = products.value.find(p => p.id === item.product_id)
+  return selectedProduct?.colors || []
 }
 
 // Add a new product item to the order
@@ -984,6 +1041,7 @@ const addProductItem = () => {
   orderForm.items.push({
     product_id: '',
     product_name: '',
+    color: '',
     quantity: 1,
     unit_price: 0,
     total_price: 0
@@ -1044,13 +1102,14 @@ const openAddModal = () => {
     items: [{
       product_id: '',
       product_name: '',
+      color: '',
       quantity: 1,
       unit_price: 0,
       total_price: 0
     }]
   })
   showModal.value = true
-  
+
   // Ensure products are loaded
   if (products.value.length === 0) {
     fetchProducts()
@@ -1072,6 +1131,7 @@ const openEditModal = (order: Order) => {
         id: item.id,
         product_id: item.product_id,
         product_name: item.product_name,
+        color: item.color || '',
         quantity: item.quantity,
         unit_price: item.unit_price,
         total_price: item.total_price
@@ -1083,6 +1143,7 @@ const openEditModal = (order: Order) => {
     items = [{
       product_id: product?.id || '',
       product_name: order.product_name,
+      color: '',
       quantity: order.quantity || 1,
       unit_price: order.unit_price || 0,
       total_price: (order.quantity || 1) * (order.unit_price || 0)
@@ -1092,6 +1153,7 @@ const openEditModal = (order: Order) => {
     items = [{
       product_id: '',
       product_name: '',
+      color: '',
       quantity: 1,
       unit_price: 0,
       total_price: 0
@@ -1389,6 +1451,7 @@ const saveOrder = async () => {
       const orderItemsData = orderForm.items.map((item: any) => ({
         order_id: orderId,
         product_id: parseInt(item.product_id),
+        color: item.color || null,
         quantity: item.quantity,
         unit_price: item.unit_price,
         total_price: item.total_price
@@ -1419,6 +1482,7 @@ const saveOrder = async () => {
       const orderItemsData = orderForm.items.map((item: any) => ({
         order_id: newOrderId,
         product_id: parseInt(item.product_id),
+        color: item.color || null,
         quantity: item.quantity,
         unit_price: item.unit_price,
         total_price: item.total_price
@@ -2047,7 +2111,8 @@ onMounted(async () => {
   border-radius: 12px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: auto;
+  max-height: 70vh;
   position: relative;
 }
 
@@ -2084,7 +2149,10 @@ onMounted(async () => {
   text-align: left;
   border-bottom: 2px solid #dee2e6;
   white-space: nowrap; /* Prevent text wrapping in headers */
-  position: relative;
+  /* Sticky header — stays visible while scrolling (rules.md) */
+  position: sticky;
+  top: 0;
+  z-index: 20;
   user-select: none;
 }
 
@@ -2156,10 +2224,12 @@ onMounted(async () => {
   z-index: 10;
 }
 
-/* Sticky header background */
+/* Sticky header background — top-right corner stays above both axes */
 .orders-table thead th.sticky-column {
   background: #f8f9fa;
   box-shadow: -2px 0 4px rgba(0, 0, 0, 0.1);
+  top: 0;
+  z-index: 30;
 }
 
 /* Sticky body cell background */
@@ -2662,6 +2732,11 @@ onMounted(async () => {
 .product-name {
   font-weight: 500;
   color: #374151;
+}
+
+.product-color {
+  color: #6b7280;
+  font-size: 0.8rem;
 }
 
 .product-quantity {

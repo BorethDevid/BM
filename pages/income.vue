@@ -123,41 +123,52 @@
           <table class="data-table">
             <thead>
               <tr>
-                <th>ID</th>
-                <th>Date</th>
-                <th>Category</th>
-                <th>Description</th>
-                <th>Source</th>
-                <th>Revenue</th>
-                <th>Cost</th>
-                <th>Profit</th>
-                <th>Status</th>
-                <th class="sticky-column">Actions</th>
+                <th
+                  v-for="columnKey in columnOrder"
+                  :key="columnKey"
+                  :draggable="true"
+                  @dragstart="handleDragStart($event, columnKey)"
+                  @dragover="handleDragOver($event, columnKey)"
+                  @dragleave="handleDragLeave"
+                  @drop="handleDrop($event, columnKey)"
+                  @dragend="handleDragEnd"
+                  :class="{
+                    'dragging': draggedColumn === columnKey,
+                    'drag-over': dragOverColumn === columnKey,
+                    'sticky-column': columnKey === 'actions'
+                  }"
+                  class="draggable-header"
+                >
+                  <div class="header-content">
+                    <span class="drag-handle">⋮⋮</span>
+                    <span class="header-text">{{ getColumnLabel(columnKey) }}</span>
+                  </div>
+                </th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="record in filteredIncome" :key="record.id">
-                <td>#{{ record.id }}</td>
-                <td>{{ formatDate(record.income_date) }}</td>
-                <td>
-                  <span class="category-badge" :style="{ background: getCategoryColor(record.category) }">
+                <td
+                  v-for="columnKey in columnOrder"
+                  :key="columnKey"
+                  :class="{ 'sticky-column': columnKey === 'actions' }"
+                >
+                  <span v-if="columnKey === 'id'">#{{ record.id }}</span>
+                  <span v-else-if="columnKey === 'date'">{{ formatDate(record.income_date) }}</span>
+                  <span v-else-if="columnKey === 'category'" class="category-badge" :style="{ background: getCategoryColor(record.category) }">
                     {{ getCategoryIcon(record.category) }} {{ record.category }}
                   </span>
-                </td>
-                <td class="description-cell">{{ record.description }}</td>
-                <td>{{ record.source || '-' }}</td>
-                <td class="amount-cell green">${{ record.amount.toFixed(2) }}</td>
-                <td class="amount-cell">${{ (record.cost || 0).toFixed(2) }}</td>
-                <td :class="['amount-cell', 'profit-cell', record.profit >= 0 ? 'positive' : 'negative']">
-                  ${{ record.profit.toFixed(2) }}
-                </td>
-                <td>
-                  <span :class="['status-badge', record.payment_status.toLowerCase()]">
+                  <span v-else-if="columnKey === 'description'" class="description-cell">{{ record.description }}</span>
+                  <span v-else-if="columnKey === 'source'">{{ record.source || '-' }}</span>
+                  <span v-else-if="columnKey === 'revenue'" class="amount-cell green">${{ record.amount.toFixed(2) }}</span>
+                  <span v-else-if="columnKey === 'cost'" class="amount-cell">${{ (record.cost || 0).toFixed(2) }}</span>
+                  <span v-else-if="columnKey === 'profit'" :class="['amount-cell', 'profit-cell', record.profit >= 0 ? 'positive' : 'negative']">
+                    ${{ record.profit.toFixed(2) }}
+                  </span>
+                  <span v-else-if="columnKey === 'status'" :class="['status-badge', record.payment_status.toLowerCase()]">
                     {{ record.payment_status }}
                   </span>
-                </td>
-                <td class="sticky-column">
-                  <div class="action-buttons">
+                  <div v-else-if="columnKey === 'actions'" class="action-buttons">
                     <button class="btn btn-sm btn-edit" @click="openEditModal(record)">✏️</button>
                     <button class="btn btn-sm btn-delete" @click="confirmDelete(record)">🗑️</button>
                   </div>
@@ -345,6 +356,101 @@ const filters = ref({
 })
 
 const isTableExpanded = ref(false)
+
+// ==============================================
+// Column ordering (drag-and-drop) — required by rules.md
+// ==============================================
+const availableColumns = [
+  { key: 'id', label: 'ID' },
+  { key: 'date', label: 'Date' },
+  { key: 'category', label: 'Category' },
+  { key: 'description', label: 'Description' },
+  { key: 'source', label: 'Source' },
+  { key: 'revenue', label: 'Revenue' },
+  { key: 'cost', label: 'Cost' },
+  { key: 'profit', label: 'Profit' },
+  { key: 'status', label: 'Status' },
+  { key: 'actions', label: 'Actions' }
+]
+
+const columnOrder = ref<string[]>(availableColumns.map(c => c.key))
+const draggedColumn = ref<string | null>(null)
+const dragOverColumn = ref<string | null>(null)
+
+const getColumnLabel = (columnKey: string) => {
+  const column = availableColumns.find(col => col.key === columnKey)
+  return column ? column.label : columnKey
+}
+
+const COLUMN_ORDER_KEY = 'incomeColumnOrder'
+
+const loadColumnOrder = () => {
+  const saved = localStorage.getItem(COLUMN_ORDER_KEY)
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved) as string[]
+      const known = availableColumns.map(c => c.key)
+      const valid = parsed.filter(k => known.includes(k))
+      const missing = known.filter(k => !valid.includes(k))
+      columnOrder.value = [...valid, ...missing]
+    } catch (e) {
+      console.warn('Failed to load column order:', e)
+    }
+  }
+}
+
+const saveColumnOrder = () => {
+  localStorage.setItem(COLUMN_ORDER_KEY, JSON.stringify(columnOrder.value))
+}
+
+const handleDragStart = (event: DragEvent, columnKey: string) => {
+  draggedColumn.value = columnKey
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', columnKey)
+  }
+}
+
+const handleDragOver = (event: DragEvent, columnKey: string) => {
+  event.preventDefault()
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = 'move'
+  }
+  dragOverColumn.value = columnKey
+}
+
+const handleDragLeave = () => {
+  dragOverColumn.value = null
+}
+
+const handleDrop = (event: DragEvent, targetColumnKey: string) => {
+  event.preventDefault()
+  if (!draggedColumn.value || draggedColumn.value === targetColumnKey) {
+    dragOverColumn.value = null
+    draggedColumn.value = null
+    return
+  }
+  const draggedIndex = columnOrder.value.indexOf(draggedColumn.value)
+  const targetIndex = columnOrder.value.indexOf(targetColumnKey)
+  if (draggedIndex !== -1 && targetIndex !== -1) {
+    const draggedItem = columnOrder.value.splice(draggedIndex, 1)[0]
+    if (draggedItem) {
+      if (draggedIndex < targetIndex) {
+        columnOrder.value.splice(targetIndex - 1, 0, draggedItem)
+      } else {
+        columnOrder.value.splice(targetIndex, 0, draggedItem)
+      }
+      saveColumnOrder()
+    }
+  }
+  dragOverColumn.value = null
+  draggedColumn.value = null
+}
+
+const handleDragEnd = () => {
+  dragOverColumn.value = null
+  draggedColumn.value = null
+}
 
 const incomeForm = reactive({
   income_date: getCurrentDate(),
@@ -617,6 +723,7 @@ const filteredIncome = computed(() => {
 })
 
 onMounted(async () => {
+  loadColumnOrder()
   loadTableWidthPreference()
   await refreshData()
 })
@@ -823,6 +930,8 @@ onMounted(async () => {
   border-radius: 12px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   overflow-x: auto;
+  overflow-y: auto;
+  max-height: 70vh;
 }
 
 .data-table {
@@ -838,6 +947,10 @@ onMounted(async () => {
   padding: 1rem;
   text-align: left;
   border-bottom: 2px solid #dee2e6;
+  /* Sticky header — stays visible while scrolling (rules.md) */
+  position: sticky;
+  top: 0;
+  z-index: 20;
 }
 
 .data-table td {
@@ -856,6 +969,12 @@ onMounted(async () => {
   background: #f8f9fa;
   box-shadow: -2px 0 4px rgba(0, 0, 0, 0.1);
   z-index: 10;
+}
+
+/* Sticky header + sticky column corner stays above both axes */
+.data-table thead th.sticky-column {
+  top: 0;
+  z-index: 30;
 }
 
 .data-table tbody td.sticky-column {
@@ -1098,4 +1217,37 @@ onMounted(async () => {
   background-color: #dc3545;
   color: white;
 }
+
+/* Drag and drop headers */
+.draggable-header {
+  cursor: move;
+  transition: all 0.2s ease;
+}
+.draggable-header:hover { background: #e9ecef; }
+.draggable-header.dragging {
+  opacity: 0.5;
+  background: #dee2e6;
+}
+.draggable-header.drag-over {
+  background: #007bff;
+  color: white;
+  border-left: 3px solid #0056b3;
+  border-right: 3px solid #0056b3;
+}
+.header-content {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.drag-handle {
+  color: #6c757d;
+  font-size: 0.8rem;
+  cursor: grab;
+  user-select: none;
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+}
+.draggable-header:hover .drag-handle { opacity: 1; }
+.draggable-header.dragging .drag-handle { cursor: grabbing; }
+.header-text { flex: 1; }
 </style>

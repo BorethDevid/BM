@@ -3,3 +3,4 @@
     - Users can move any column to any position (left ↔ right).
     - New column order should update immediately after drop.
     - Applies to all table implementations unless explicitly exempted.
+    - The table header should be sticky even we scroll down

@@ -54,6 +54,21 @@
         <button class="btn btn-secondary" @click="fetchProducts">
           Refresh
         </button>
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input
+            v-model="searchQuery"
+            type="search"
+            class="search-input"
+            placeholder="Search by name…"
+          />
+          <button
+            v-if="searchQuery"
+            class="search-clear"
+            title="Clear search"
+            @click="searchQuery = ''"
+          >&times;</button>
+        </div>
       </div>
 
       <!-- Products Table -->
@@ -204,6 +219,13 @@
       </div>
 
       <!-- Empty State -->
+      <div v-else-if="searchQuery.trim()" class="empty-state">
+        <h3>No products match “{{ searchQuery.trim() }}”</h3>
+        <p>Try a different name or clear the search.</p>
+        <button class="btn btn-secondary" @click="searchQuery = ''">
+          Clear Search
+        </button>
+      </div>
       <div v-else class="empty-state">
         <h3>No Products in {{ activeCategoryLabel }}</h3>
         <p>Add your first {{ activeCategoryLabel }} product to get started!</p>
@@ -706,10 +728,19 @@ const loadCategoryState = () => {
   }
 }
 
-// Products in the currently selected category. Feeds the sort/paginate chain.
-const visibleProducts = computed(() =>
-  products.value.filter(p => (p.category || 'bag') === activeCategory.value)
-)
+// Free-text search by product name (case-insensitive).
+const searchQuery = ref('')
+
+// Products in the currently selected category, narrowed by the name search.
+// Feeds the sort/paginate chain.
+const visibleProducts = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  return products.value.filter(p => {
+    if ((p.category || 'bag') !== activeCategory.value) return false
+    if (q && !(p.name || '').toLowerCase().includes(q)) return false
+    return true
+  })
+})
 
 // ==============================================
 // Column ordering (drag-and-drop) — required by rules.md
@@ -800,7 +831,7 @@ watch(totalPages, (max) => {
 })
 
 // Resetting to the first page on sort/page-size/category change keeps the view predictable.
-watch([nameSortDir, pageSize, activeCategory], () => {
+watch([nameSortDir, pageSize, activeCategory, searchQuery], () => {
   currentPage.value = 1
 })
 
@@ -1216,14 +1247,63 @@ onMounted(() => {
   display: flex;
   gap: 1rem;
   margin-bottom: 2rem;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .action-bar .btn {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+/* Search box (pushed to the right) */
+.search-box {
+  position: relative;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  min-width: 240px;
+}
+
+.search-box .search-icon {
+  position: absolute;
+  left: 0.7rem;
+  font-size: 0.9rem;
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+.search-input {
+  width: 100%;
+  padding: 0.6rem 2rem 0.6rem 2.1rem;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  transition: border-color 0.2s;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #3498db;
+}
+
+.search-clear {
+  position: absolute;
+  right: 0.5rem;
+  border: none;
+  background: none;
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+  color: #7f8c8d;
+}
+
+.search-clear:hover { color: #e74c3c; }
+
+@media (max-width: 600px) {
+  .search-box { margin-left: 0; width: 100%; }
 }
 
 /* Category Tabs */
@@ -1351,6 +1431,8 @@ onMounted(() => {
   border-radius: 12px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   overflow-x: auto;
+  overflow-y: auto;
+  max-height: 70vh;
 }
 
 .products-table {
@@ -1367,6 +1449,10 @@ onMounted(() => {
   text-align: left;
   border-bottom: 2px solid #dee2e6;
   white-space: nowrap;
+  /* Sticky header — stays visible while scrolling (rules.md) */
+  position: sticky;
+  top: 0;
+  z-index: 20;
 }
 
 .products-table td {

@@ -71,36 +71,49 @@
           <table class="categories-table">
             <thead>
               <tr>
-                <th>ID</th>
-                <th>Name</th>
-                <th>Description</th>
-                <th>Product Count</th>
-                <th>Created</th>
-                <th>Actions</th>
+                <th
+                  v-for="columnKey in columnOrder"
+                  :key="columnKey"
+                  :draggable="true"
+                  @dragstart="handleDragStart($event, columnKey)"
+                  @dragover="handleDragOver($event, columnKey)"
+                  @dragleave="handleDragLeave"
+                  @drop="handleDrop($event, columnKey)"
+                  @dragend="handleDragEnd"
+                  :class="{
+                    'dragging': draggedColumn === columnKey,
+                    'drag-over': dragOverColumn === columnKey
+                  }"
+                  class="draggable-header"
+                >
+                  <div class="header-content">
+                    <span class="drag-handle">⋮⋮</span>
+                    <span class="header-text">{{ getColumnLabel(columnKey) }}</span>
+                  </div>
+                </th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="(category, index) in categories" :key="category.id">
-                <td>{{ index + 1 }}</td>
-                <td>
-                  <span class="category-name">{{ category.name }}</span>
-                </td>
-                <td>{{ category.description || 'No description' }}</td>
-                <td>
-                  <span class="product-count">{{ getProductCount(category.name) }}</span>
-                </td>
-                <td>{{ formatDate(category.created_at) }}</td>
-                <td>
-                  <div class="action-buttons">
-                    <button 
-                      class="btn btn-sm btn-edit" 
+                <td
+                  v-for="columnKey in columnOrder"
+                  :key="columnKey"
+                >
+                  <span v-if="columnKey === 'id'">{{ index + 1 }}</span>
+                  <span v-else-if="columnKey === 'name'" class="category-name">{{ category.name }}</span>
+                  <span v-else-if="columnKey === 'description'">{{ category.description || 'No description' }}</span>
+                  <span v-else-if="columnKey === 'productCount'" class="product-count">{{ getProductCount(category.name) }}</span>
+                  <span v-else-if="columnKey === 'created'">{{ formatDate(category.created_at) }}</span>
+                  <div v-else-if="columnKey === 'actions'" class="action-buttons">
+                    <button
+                      class="btn btn-sm btn-edit"
                       @click="openEditModal(category)"
                       title="Edit category"
                     >
                       ✏️
                     </button>
-                    <button 
-                      class="btn btn-sm btn-delete" 
+                    <button
+                      class="btn btn-sm btn-delete"
                       @click="confirmDelete(category)"
                       title="Delete category"
                     >
@@ -413,8 +426,100 @@ const formatDate = (dateString: string) => {
   return `${dateStr} ${timeStr}`
 }
 
+// ==============================================
+// Column ordering (drag-and-drop) — required by rules.md
+// ==============================================
+const availableColumns = [
+  { key: 'id', label: 'ID' },
+  { key: 'name', label: 'Name' },
+  { key: 'description', label: 'Description' },
+  { key: 'productCount', label: 'Product Count' },
+  { key: 'created', label: 'Created' },
+  { key: 'actions', label: 'Actions' }
+]
+
+const columnOrder = ref<string[]>(availableColumns.map(c => c.key))
+const draggedColumn = ref<string | null>(null)
+const dragOverColumn = ref<string | null>(null)
+
+const getColumnLabel = (columnKey: string) => {
+  const column = availableColumns.find(col => col.key === columnKey)
+  return column ? column.label : columnKey
+}
+
+const COLUMN_ORDER_KEY = 'categoryColumnOrder'
+
+const loadColumnOrder = () => {
+  const saved = localStorage.getItem(COLUMN_ORDER_KEY)
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved) as string[]
+      const known = availableColumns.map(c => c.key)
+      const valid = parsed.filter(k => known.includes(k))
+      const missing = known.filter(k => !valid.includes(k))
+      columnOrder.value = [...valid, ...missing]
+    } catch (e) {
+      console.warn('Failed to load column order:', e)
+    }
+  }
+}
+
+const saveColumnOrder = () => {
+  localStorage.setItem(COLUMN_ORDER_KEY, JSON.stringify(columnOrder.value))
+}
+
+const handleDragStart = (event: DragEvent, columnKey: string) => {
+  draggedColumn.value = columnKey
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', columnKey)
+  }
+}
+
+const handleDragOver = (event: DragEvent, columnKey: string) => {
+  event.preventDefault()
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = 'move'
+  }
+  dragOverColumn.value = columnKey
+}
+
+const handleDragLeave = () => {
+  dragOverColumn.value = null
+}
+
+const handleDrop = (event: DragEvent, targetColumnKey: string) => {
+  event.preventDefault()
+  if (!draggedColumn.value || draggedColumn.value === targetColumnKey) {
+    dragOverColumn.value = null
+    draggedColumn.value = null
+    return
+  }
+  const draggedIndex = columnOrder.value.indexOf(draggedColumn.value)
+  const targetIndex = columnOrder.value.indexOf(targetColumnKey)
+  if (draggedIndex !== -1 && targetIndex !== -1) {
+    const draggedItem = columnOrder.value.splice(draggedIndex, 1)[0]
+    if (draggedItem) {
+      if (draggedIndex < targetIndex) {
+        columnOrder.value.splice(targetIndex - 1, 0, draggedItem)
+      } else {
+        columnOrder.value.splice(targetIndex, 0, draggedItem)
+      }
+      saveColumnOrder()
+    }
+  }
+  dragOverColumn.value = null
+  draggedColumn.value = null
+}
+
+const handleDragEnd = () => {
+  dragOverColumn.value = null
+  draggedColumn.value = null
+}
+
 // Fetch data on component mount
 onMounted(() => {
+  loadColumnOrder()
   fetchCategories()
 })
 
@@ -657,7 +762,8 @@ const toggleTotals = () => {
   background: white;
   border-radius: 12px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
+  overflow: auto;
+  max-height: 70vh;
 }
 
 .categories-table {
@@ -672,6 +778,10 @@ const toggleTotals = () => {
   padding: 1rem;
   text-align: left;
   border-bottom: 2px solid #dee2e6;
+  /* Sticky header — stays visible while scrolling (rules.md) */
+  position: sticky;
+  top: 0;
+  z-index: 20;
 }
 
 .categories-table td {
@@ -683,6 +793,39 @@ const toggleTotals = () => {
 .categories-table tr:hover {
   background: #f8f9fa;
 }
+
+/* Drag and drop headers */
+.draggable-header {
+  cursor: move;
+  transition: all 0.2s ease;
+}
+.draggable-header:hover { background: #e9ecef; }
+.draggable-header.dragging {
+  opacity: 0.5;
+  background: #dee2e6;
+}
+.draggable-header.drag-over {
+  background: #007bff;
+  color: white;
+  border-left: 3px solid #0056b3;
+  border-right: 3px solid #0056b3;
+}
+.header-content {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.drag-handle {
+  color: #6c757d;
+  font-size: 0.8rem;
+  cursor: grab;
+  user-select: none;
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+}
+.draggable-header:hover .drag-handle { opacity: 1; }
+.draggable-header.dragging .drag-handle { cursor: grabbing; }
+.header-text { flex: 1; }
 
 .category-name {
   font-weight: 600;
