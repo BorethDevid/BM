@@ -112,6 +112,18 @@
                   <!-- Index (global position across all pages) -->
                   <span v-if="columnKey === 'index'">{{ (currentPage - 1) * pageSize + index + 1 }}</span>
 
+                  <!-- Done -->
+                  <div v-else-if="columnKey === 'done'" class="done-cell">
+                    <label class="checkbox-container">
+                      <input
+                        type="checkbox"
+                        v-model="product.done"
+                        @change="toggleDone(product)"
+                      />
+                      <span class="checkmark"></span>
+                    </label>
+                  </div>
+
                   <!-- Name -->
                   <span v-else-if="columnKey === 'name'" class="product-name">{{ product.name }}</span>
 
@@ -406,6 +418,18 @@
             <input id="priceSellUsd" v-model.number="productForm.price_sell_usd" type="number" min="0" step="0.01" placeholder="0.00" />
           </div>
 
+          <div class="form-group done-form-group">
+            <label class="checkbox-container">
+              <input
+                id="done"
+                type="checkbox"
+                v-model="productForm.done"
+              />
+              <span class="checkmark"></span>
+              <span class="checkbox-label-text">Mark as Done / Completed</span>
+            </label>
+          </div>
+
           <div class="form-row">
             <div class="form-group">
               <label>Pic CN Shop</label>
@@ -500,6 +524,7 @@ interface MellowProduct {
   type_shop: string | null
   pic_cn_shop: string | null
   pic_bag: string | null
+  done: boolean
   created_at: string
 }
 
@@ -531,7 +556,8 @@ const productForm = reactive({
   price_sell_usd: 0,
   type_shop: '',
   pic_cn_shop: '',
-  pic_bag: ''
+  pic_bag: '',
+  done: false
 })
 
 // Auto-calculate Price Total / Unit $ from Buy $ + Delivery $.
@@ -750,6 +776,7 @@ const availableColumns = [
   { key: 'picCnShop', label: 'Pic CN Shop' },
   { key: 'picBag', label: 'Pic Bag' },
   { key: 'index', label: '#' },
+  { key: 'done', label: 'Done' },
   { key: 'name', label: 'Name' },
   { key: 'qty', label: 'QTY' },
   { key: 'colors', label: 'Colors (QTY)' },
@@ -954,6 +981,20 @@ const handleDragEnd = () => {
 // ==============================================
 // Data operations
 // ==============================================
+const toggleDone = async (product: MellowProduct) => {
+  try {
+    const { update } = useSupabaseDB()
+    const { error: updateError } = await update('mellow_products', { done: product.done })
+      .eq('id', product.id)
+    if (updateError) throw updateError
+  } catch (err) {
+    console.error('Error toggling done status:', err)
+    // Revert state on error
+    product.done = !product.done
+    alert('Failed to update done status. Please try again.')
+  }
+}
+
 const fetchProducts = async () => {
   try {
     loading.value = true
@@ -963,7 +1004,7 @@ const fetchProducts = async () => {
     // Skip the heavy base64 image columns (pic_cn_shop, pic_bag) here — they make
     // the payload huge. Thumbnails are loaded lazily per visible page instead.
     const { data, error: fetchError } = await from('mellow_products')
-      .select('id, name, category, qty, colors, price_buy_yuan, price_buy_usd, price_delivery_usd, price_total_per_unit_usd, price_sell_usd, type_shop, created_at')
+      .select('id, name, category, qty, colors, price_buy_yuan, price_buy_usd, price_delivery_usd, price_total_per_unit_usd, price_sell_usd, type_shop, done, created_at')
       .order('id', { ascending: false })
 
     if (fetchError) throw fetchError
@@ -992,6 +1033,7 @@ const resetForm = () => {
   productForm.type_shop = ''
   productForm.pic_cn_shop = ''
   productForm.pic_bag = ''
+  productForm.done = false
 }
 
 const openAddModal = () => {
@@ -1040,6 +1082,7 @@ const openEditModal = async (product: MellowProduct) => {
   productForm.type_shop = product.type_shop ?? ''
   productForm.pic_cn_shop = product.pic_cn_shop ?? ''
   productForm.pic_bag = product.pic_bag ?? ''
+  productForm.done = product.done ?? false
   showModal.value = true
 }
 
@@ -1118,7 +1161,8 @@ const saveProduct = async () => {
       price_sell_usd: productForm.price_sell_usd || 0,
       type_shop: productForm.type_shop.trim() || null,
       pic_cn_shop: productForm.pic_cn_shop || null,
-      pic_bag: productForm.pic_bag || null
+      pic_bag: productForm.pic_bag || null,
+      done: productForm.done
     }
 
     const { insert, update } = useSupabaseDB()
@@ -2032,5 +2076,89 @@ onMounted(() => {
   .modal-content { width: 95%; margin: 1rem; }
   .form-actions { flex-direction: column; }
   .form-actions .btn { width: 100%; }
+}
+
+/* Custom Checkbox Styling */
+.checkbox-container {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #2c3e50;
+  min-height: 24px;
+}
+
+.checkbox-container input {
+  position: absolute;
+  opacity: 0;
+  cursor: pointer;
+  height: 0;
+  width: 0;
+}
+
+.checkmark {
+  position: relative;
+  display: inline-block;
+  height: 20px;
+  width: 20px;
+  background-color: #fff;
+  border: 2px solid #dee2e6;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  margin-right: 8px;
+}
+
+.done-cell .checkmark {
+  margin-right: 0;
+}
+
+.done-cell {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.checkbox-container:hover input ~ .checkmark {
+  border-color: #3498db;
+}
+
+.checkbox-container input:checked ~ .checkmark {
+  background-color: #3498db;
+  border-color: #3498db;
+}
+
+.checkmark:after {
+  content: "";
+  position: absolute;
+  display: none;
+}
+
+.checkbox-container input:checked ~ .checkmark:after {
+  display: block;
+}
+
+.checkbox-container .checkmark:after {
+  left: 6px;
+  top: 2px;
+  width: 5px;
+  height: 10px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.checkbox-label-text {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.done-form-group {
+  margin-top: 1rem;
+  margin-bottom: 1.5rem;
+  padding: 0.5rem 0;
 }
 </style>
