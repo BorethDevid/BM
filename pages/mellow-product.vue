@@ -46,6 +46,20 @@
         </button>
       </div>
 
+      <!-- Done summary per category (type) -->
+      <div class="done-summary">
+        <span class="done-summary-title">Done by type:</span>
+        <span
+          v-for="cat in doneSummary"
+          :key="cat.value"
+          class="done-summary-item"
+        >
+          <span class="cat-icon">{{ cat.icon }}</span>
+          <span class="done-summary-label">{{ cat.label }}</span>
+          <span class="done-summary-count">{{ cat.done }} / {{ cat.total }}</span>
+        </span>
+      </div>
+
       <!-- Action Bar -->
       <div class="action-bar">
         <button class="btn btn-primary" @click="openAddModal">
@@ -54,6 +68,20 @@
         <button class="btn btn-secondary" @click="fetchProducts">
           Refresh
         </button>
+
+        <!-- Filter by done / not done -->
+        <div class="done-filter">
+          <button
+            v-for="opt in doneFilterOptions"
+            :key="opt.value"
+            class="done-filter-btn"
+            :class="{ active: doneFilter === opt.value }"
+            @click="doneFilter = opt.value"
+          >
+            {{ opt.label }}
+          </button>
+        </div>
+
         <div class="search-box">
           <span class="search-icon">🔍</span>
           <input
@@ -126,6 +154,9 @@
 
                   <!-- Name -->
                   <span v-else-if="columnKey === 'name'" class="product-name">{{ product.name }}</span>
+
+                  <!-- Category -->
+                  <span v-else-if="columnKey === 'category'">{{ formatCategoryLabel(product.category || 'bag') }}</span>
 
                   <!-- QTY -->
                   <span v-else-if="columnKey === 'qty'">{{ product.qty ?? 0 }}</span>
@@ -757,14 +788,46 @@ const loadCategoryState = () => {
 // Free-text search by product name (case-insensitive).
 const searchQuery = ref('')
 
-// Products in the currently selected category, narrowed by the name search.
-// Feeds the sort/paginate chain.
+// ==============================================
+// Filter by done / not done
+// A segmented control in the action bar narrows the list to completed or
+// pending products. Applied alongside the search / category filter below.
+// ==============================================
+type DoneFilter = 'all' | 'done' | 'notDone'
+const doneFilter = ref<DoneFilter>('all')
+const doneFilterOptions: { value: DoneFilter, label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'done', label: 'Done' },
+  { value: 'notDone', label: 'Not Done' }
+]
+
+const matchesDoneFilter = (p: MellowProduct) => {
+  if (doneFilter.value === 'done') return !!p.done
+  if (doneFilter.value === 'notDone') return !p.done
+  return true
+}
+
+// Done quantity per category (type): how many products in each category are
+// marked done, out of the category's total. Reuses the tab metadata for labels.
+const doneSummary = computed(() =>
+  categoryTabs.value.map(cat => {
+    const done = products.value.filter(
+      p => (p.category || 'bag') === cat.value && p.done
+    ).length
+    return { ...cat, done, total: cat.count }
+  })
+)
+
+// Products filtered by the done filter, then by name search globally if a query
+// is active, otherwise by the active category tab. Feeds the sort/paginate chain.
 const visibleProducts = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   return products.value.filter(p => {
-    if ((p.category || 'bag') !== activeCategory.value) return false
-    if (q && !(p.name || '').toLowerCase().includes(q)) return false
-    return true
+    if (!matchesDoneFilter(p)) return false
+    if (q) {
+      return (p.name || '').toLowerCase().includes(q)
+    }
+    return (p.category || 'bag') === activeCategory.value
   })
 })
 
@@ -778,6 +841,7 @@ const availableColumns = [
   { key: 'index', label: '#' },
   { key: 'done', label: 'Done' },
   { key: 'name', label: 'Name' },
+  { key: 'category', label: 'Category' },
   { key: 'qty', label: 'QTY' },
   { key: 'colors', label: 'Colors (QTY)' },
   { key: 'priceBuyYuan', label: 'Price Buy ¥' },
@@ -858,7 +922,7 @@ watch(totalPages, (max) => {
 })
 
 // Resetting to the first page on sort/page-size/category change keeps the view predictable.
-watch([nameSortDir, pageSize, activeCategory, searchQuery], () => {
+watch([nameSortDir, pageSize, activeCategory, searchQuery, doneFilter], () => {
   currentPage.value = 1
 })
 
@@ -1403,6 +1467,77 @@ onMounted(() => {
 }
 
 .add-category-tab:hover { background: #eef6fc; }
+
+/* Done summary per type */
+.done-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+  padding: 0.75rem 1rem;
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 10px;
+}
+
+.done-summary-title {
+  font-weight: 700;
+  color: #2c3e50;
+  font-size: 0.9rem;
+}
+
+.done-summary-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.7rem;
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  color: #5a6c7d;
+}
+
+.done-summary-item .cat-icon { font-size: 1rem; line-height: 1; }
+.done-summary-label { font-weight: 600; color: #2c3e50; }
+
+.done-summary-count {
+  background: #d4edda;
+  color: #155724;
+  border-radius: 999px;
+  padding: 0.05rem 0.55rem;
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+
+/* Done / not-done filter (segmented control) */
+.done-filter {
+  display: inline-flex;
+  border: 2px solid #dee2e6;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.done-filter-btn {
+  border: none;
+  background: #fff;
+  color: #5a6c7d;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-right: 1px solid #dee2e6;
+}
+
+.done-filter-btn:last-child { border-right: none; }
+.done-filter-btn:hover { background: #eef6fc; color: #2c3e50; }
+
+.done-filter-btn.active {
+  background: #3498db;
+  color: #fff;
+}
 
 .category-select {
   width: 100%;
